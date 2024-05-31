@@ -239,12 +239,4 @@ def get_weighted_dataloaders():
 
 
 if __name__=='__main__':    
-    simplepairs, weightedpairs, weights, CRrate = \
-        load("CR_Jews_graph_weights_labels.csv","CR_Jews_graph_ibd_labels.csv")
-    print(simplepairs[:10])
-    am = np.argmax(simplepairs[:,2])
-    print('edge with maximum number of occurences', simplepairs[am])
-    
-    print(weightedpairs[:10])    
-    print(weights[:10])
-    print(CRrate[:20])
+    pass
