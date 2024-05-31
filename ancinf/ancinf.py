@@ -7,11 +7,13 @@ from .utils import simulate as sim
 import json
 import os
 
+
 @click.group()
 def cli():
     pass
 
-#STAGE1 GETPARAMS
+
+# STAGE1 GETPARAMS
 @cli.command()
 @click.argument("datadir")
 @click.argument("workdir")
@@ -30,7 +32,7 @@ def getparams(datadir, workdir, infile, outfile):
     print("Finished!")
 
     
-#STAGE1' PREPROCESS    
+# STAGE1' PREPROCESS    
 @cli.command()
 @click.argument("datadir")
 @click.argument("workdir")
@@ -40,7 +42,7 @@ def getparams(datadir, workdir, infile, outfile):
 def preprocess(datadir, workdir, infile, outfile, seed):
     """Filter datsets from DATADIR, generate train-val-test splits and experiment list file in WORKDIR"""    
     if outfile is None:
-        #try to remove .ancinf from infile
+        # try to remove .ancinf from infile
         position = infile.find('.ancinf')
         if position>0:
             outfile = infile[:position]+'.explist'
@@ -52,7 +54,7 @@ def preprocess(datadir, workdir, infile, outfile, seed):
     print(f"Finished! Total {time.time()-start:.2f}s")
 
 
-#STAGE 2 SIMULATE
+# STAGE 2 SIMULATE
 @cli.command()
 @click.argument("workdir")
 @click.option("--infile", default="project.params", help="File with simulation parameters, defaults to project.params")
@@ -74,46 +76,45 @@ def simulate(workdir, infile, outfile, seed):
     print(f"Finished! Total {time.time()-start:.2f}s")
     
     
-# #STAGE3 HEURISTICS GNN etc
+# STAGE3 HEURISTICS GNN etc
 def combine_splits(partresults):    
     result = {}
     for partres in partresults:
-        #include values from partresults
+        # include values from partresults
         for dataset in partres:            
             if dataset in result:
-                #existing dataset. list experiments and find new
+                # existing dataset. list experiments and find new
                 existing_exp_ids = [ exp["exp_idx"] for exp in result[dataset] ]
                 for exp in partres[dataset]: 
                     if exp["exp_idx"] in existing_exp_ids:
-                        #existing experiment, find it
+                        # existing experiment, find it
                         for res_exp in result[dataset]:
                             if res_exp["exp_idx"] == exp["exp_idx"]:
                                 break
                         res_exp["dataset_time"] += exp["dataset_time"]
-                        #now list classifiers and add split scores
-                        #classifiers should be the same
+                        # now list classifiers and add split scores
+                        # classifiers should be the same
                         for classifier in exp["classifiers"]:
                             for metric in exp["classifiers"][classifier]:
                                 if metric!="class_scores":
                                     res_exp["classifiers"][classifier][metric]["values"].extend(exp["classifiers"][classifier][metric]["values"])        
                                 else:
                                     for pop in exp["classifiers"][classifier]["class_scores"]:
-                                        res_exp["classifiers"][classifier][metric][pop]["values"].extend(exp["classifiers"][classifier][metric][pop]["values"])        
-                            
+                                        res_exp["classifiers"][classifier][metric][pop]["values"].extend(exp["classifiers"][classifier][metric][pop]["values"])                                    
                     else:
-                        #new experiment
+                        # new experiment
                         result[dataset].append(exp)
                         result[dataset][-1]["dataset_begin"] = "multiprocessing"
                         result[dataset][-1]["dataset_end"] = "multiprocessing"
                         
             else:
-                #new dataset
+                # new dataset
                 result[dataset] = partres[dataset]
                 for exp in result[dataset]:
                     exp["dataset_begin"] = "multiprocessing"
                     exp["dataset_end"] = "multiprocessing"
-            #print(result[dataset])
-    #recompute mean and std
+            # print(result[dataset])
+    # recompute mean and std
     for dataset in result:
         for exp in result[dataset]:
             for classifier in exp["classifiers"]:
@@ -137,7 +138,7 @@ def runandsavewrapper(args):
     return sim.runandsaveall(args["workdir"], args["infile"], args["outfilebase"], args["fromexp"], args["toexp"], 
                              args["fromsplit"], args["tosplit"], args["gpu"])
     
-#STAGE5 TEST HEURISTICS, COMMUNITY DETECTIONS AND TRAIN&TEST NNs
+# STAGE5 TEST HEURISTICS, COMMUNITY DETECTIONS AND TRAIN&TEST NNs
 @cli.command()
 @click.argument("workdir")
 @click.option("--infile", default="project.explist", help="File with experiment list, defaults to project.explist")
@@ -154,7 +155,7 @@ def crossval(workdir, infile, outfile, seed, processes, fromexp, toexp, fromspli
     """Run crossvalidation for classifiers including heuristics, community detections, GNNs and MLP networks"""     
     rng = np.random.default_rng(seed)  
     if outfile is None:
-        #try to remove .ancinf from infile
+        # try to remove .ancinf from infile
         position = infile.find('.explist')
         if position>0:
             outfilebase = infile[:position]
@@ -167,7 +168,7 @@ def crossval(workdir, infile, outfile, seed, processes, fromexp, toexp, fromspli
     if processes == 1:
         sim.runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tosplit, gpu)
     else:              
-        #get every process only one job computing splitrange aforehead
+        # get every process only one job computing splitrange aforehead
         splitcount = int(tosplit)-int(fromsplit)
         splitsperproc = splitcount // processes
         splitincrements = [splitsperproc]*processes
@@ -195,7 +196,7 @@ def crossval(workdir, infile, outfile, seed, processes, fromexp, toexp, fromspli
         with Pool(processes) as p:
             resfiles = p.map(runandsavewrapper, taskargs)
         
-        #now combine results        
+        # now combine results        
         if (fromexp is None) and (toexp is None):
             outfile_exp_postfix = ""
         else:
@@ -214,7 +215,7 @@ def crossval(workdir, infile, outfile, seed, processes, fromexp, toexp, fromspli
     print(f"Finished! Total {time.time()-start:.2f}s.")    
 
 
-#STAGE 4 INFERENCE
+# STAGE 4 INFERENCE
 @cli.command()
 @click.argument("workdir")
 @click.argument("traindf")
