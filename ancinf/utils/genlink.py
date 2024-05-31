@@ -1227,9 +1227,9 @@ def independent_test(model_path, model_cls, df, vertex_id, gpu_id, test_type, ma
         dp.make_train_valid_test_datasets_with_numba('one_hot', 'homogeneous', 'multiple', 'multiple', 'debug_debug', skip_train_val=True)
     elif test_type == 'graph_based':
         dp.make_train_valid_test_datasets_with_numba('graph_based', 'homogeneous', 'one', 'multiple', 'debug_debug', skip_train_val=True)
-    elif test_type == 'graph_based_masked' and mask_node is not None:
+    elif test_type == 'graph_based_masked' and mask_nodes is not None:
         dp.make_train_valid_test_datasets_with_numba('graph_based', 'homogeneous', 'one', 'multiple', 'debug_debug', skip_train_val=True, masking=True)
-    elif test_type == 'one_hot_masked' and mask_node is not None:
+    elif test_type == 'one_hot_masked' and mask_nodes is not None:
         dp.make_train_valid_test_datasets_with_numba('one_hot', 'homogeneous', 'multiple', 'multiple', 'debug_debug', skip_train_val=True, masking=True)  
     device = torch.device(f"cuda:{gpu_id}" if torch.cuda.is_available() else 'cpu')
     model = model_cls(dp.array_of_graphs_for_testing[0]).to(device)
