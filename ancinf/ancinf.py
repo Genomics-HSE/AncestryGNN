@@ -146,7 +146,8 @@ def runandsavewrapper(args):
 @cli.command()
 @click.argument("workdir")
 @click.option("--infile", default="project.explist", help="File with experiment list, defaults to project.explist")
-@click.option("--outfile", default=None, help="File with classification metrics, defaults to project file with '.result' extension")
+@click.option("--outfile", default=None, help="File with classification metrics, defaults to project file "
+              "with '.result' extension")
 @click.option("--seed", default=2023, help="Random seed")
 @click.option("--processes", default=1, help="Number of parallel workers")
 @click.option("--fromexp", default=None, help="The first experiment to run")
@@ -156,45 +157,43 @@ def runandsavewrapper(args):
 @click.option("--gpu", default=0, help="GPU")
 @click.option("--gpucount", default=1, help="GPU count")
 def crossval(workdir, infile, outfile, seed, processes, fromexp, toexp, fromsplit, tosplit, gpu, gpucount):
-    """Run crossvalidation for classifiers including heuristics, community detections, GNNs and MLP networks"""     
-    rng = np.random.default_rng(seed)  
+    """Run crossvalidation for classifiers including heuristics, community detections, GNNs and MLP networks"""    
     if outfile is None:
         # try to remove .ancinf from infile
         position = infile.find('.explist')
-        if position>0:
+        if position > 0:
             outfilebase = infile[:position]
         else:
             outfilebase = infile
     else:
         outfilebase = outfile
 
-    start = time.time()            
+    start = time.time()
     if processes == 1:
         sim.runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tosplit, gpu)
-    else:              
+    else:
         # get every process only one job computing splitrange aforehead
         splitcount = int(tosplit)-int(fromsplit)
         splitsperproc = splitcount // processes
         splitincrements = [splitsperproc]*processes
         for idx in range(splitcount % processes):
-            splitincrements[idx] +=1
-        splitrange = [int(fromsplit)] 
+            splitincrements[idx] += 1
+        splitrange = [int(fromsplit)]
         incr = 0
         for idx in range(processes):
             incr += splitincrements[idx]
             splitrange.append(int(fromsplit)+incr)
 
-
         print("Split seprarators:", splitrange)
-        
-        taskargs = [{"workdir":workdir, 
-                     "infile":infile, 
-                     "outfilebase":outfilebase, 
-                     "fromexp":fromexp, 
-                     "toexp":toexp, 
-                     "fromsplit":splitrange[procnum], 
-                     "tosplit":splitrange[procnum+1], 
-                     "gpu":procnum%gpucount}  for procnum in range(processes)]
+
+        taskargs = [{"workdir": workdir,
+                     "infile": infile,
+                     "outfilebase": outfilebase,
+                     "fromexp": fromexp,
+                     "toexp": toexp,
+                     "fromsplit": splitrange[procnum],
+                     "tosplit": splitrange[procnum+1],
+                     "gpu":procnum % gpucount}  for procnum in range(processes)]
         print(taskargs)
 
         with Pool(processes) as p:
