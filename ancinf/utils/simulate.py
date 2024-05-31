@@ -26,11 +26,12 @@ import shutil
 
 #sys.path.append(os.path.abspath(os.path.join(os.path.dirname(''), os.path.pardir)))
 from .genlink import DataProcessor, BaselineMethods, NullSimulator, Trainer,  TAGConv_3l_128h_w_k3, \
-                  TAGConv_3l_512h_w_k3, GINNet, AttnGCN, TAGConv_9l_128h_k3, GCNConv_3l_128h_w, \
+                  TAGConv_3l_512h_w_k3, TAGConv_3l_1024h_w_k3, GINNet, AttnGCN, TAGConv_9l_128h_k3, GCNConv_3l_128h_w, \
                   TAGConv_9l_512h_nw_k3, MLP_3l_128h, MLP_3l_512h, MLP_9l_128h,\
                   MLP_9l_512h, \
 GINNet_narrow_short, GINNet_wide_short, GINNet_narrow_long, GINNet_wide_long, \
-AttnGCN_narrow_short, AttnGCN_wide_short, AttnGCN_narrow_long,  AttnGCN_wide_long
+AttnGCN_narrow_short, AttnGCN_wide_short, AttnGCN_narrow_long,  AttnGCN_wide_long, \
+SAGEConv_3l_128h, SAGEConv_3l_512h, SAGEConv_9l_128h, SAGEConv_9l_512h
     
 NNs = {
     "MLP_3l_128h": MLP_3l_128h,
@@ -38,7 +39,9 @@ NNs = {
     "MLP_9l_128h": MLP_9l_128h,
     "MLP_9l_512h": MLP_9l_512h,
     "TAGConv_3l_128h_w_k3": TAGConv_3l_128h_w_k3,
-    "TAGConv_3l_512h_w_k3": TAGConv_3l_512h_w_k3,    
+    "TAGConv_3l_512h_w_k3": TAGConv_3l_512h_w_k3,
+    "TAGConv_3l_1024h_w_k3": TAGConv_3l_1024h_w_k3,
+    "TAGConv_3l_1024h_w_k3_gb": TAGConv_3l_1024h_w_k3,
     "TAGConv_9l_512h_nw_k3": TAGConv_9l_512h_nw_k3,
     "TAGConv_9l_128h_k3": TAGConv_9l_128h_k3,
     "TAGConv_3l_128h_w_k3_gb": TAGConv_3l_128h_w_k3,
@@ -66,7 +69,16 @@ NNs = {
     "AttnGCN_narrow_short_gb": AttnGCN_narrow_short, 
     "AttnGCN_wide_short_gb": AttnGCN_wide_short,
     "AttnGCN_narrow_long_gb": AttnGCN_narrow_long, 
-    "AttnGCN_wide_long_gb":AttnGCN_wide_long
+    "AttnGCN_wide_long_gb":AttnGCN_wide_long,
+    "SAGEConv_3l_128h": SAGEConv_3l_128h,
+    "SAGEConv_3l_128h_gb": SAGEConv_3l_128h,
+    "SAGEConv_3l_512h": SAGEConv_3l_512h,
+    "SAGEConv_3l_512h_gb": SAGEConv_3l_512h,
+    "SAGEConv_9l_128h": SAGEConv_9l_128h,
+    "SAGEConv_9l_128h_gb": SAGEConv_9l_128h,
+    "SAGEConv_9l_512h": SAGEConv_9l_512h,
+    "SAGEConv_9l_512h_gb": SAGEConv_9l_512h
+    
 }
 
 
