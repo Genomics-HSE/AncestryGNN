@@ -109,7 +109,7 @@ def combine_splits(partresults):
                         result[dataset].append(exp)
                         result[dataset][-1]["dataset_begin"] = "multiprocessing"
                         result[dataset][-1]["dataset_end"] = "multiprocessing"
-                        
+
             else:
                 # new dataset
                 result[dataset] = partres[dataset]
@@ -123,24 +123,25 @@ def combine_splits(partresults):
             for classifier in exp["classifiers"]:
                 for metric in exp["classifiers"][classifier]:
                     metricresults = exp["classifiers"][classifier][metric]
-                    if metric!="class_scores":
+                    if metric != "class_scores":
                         metricresults["mean"] = np.average(metricresults["values"])
                         metricresults["std"] = np.std(metricresults["values"])
                         if "clean_mean" in metricresults:
                             metricresults["clean_mean"] = np.average(metricresults["clean_values"])
                             metricresults["clean_std"] = np.std(metricresults["clean_values"])
-                    else: 
+                    else:
                         for cl in metricresults:
                             metricresults[cl]["mean"] = np.average(metricresults[cl]["values"])
                             metricresults[cl]["std"] = np.std(metricresults[cl]["values"])
-                        
-                        
-    return {"brief": sim.getbrief(result), "details":result}
+
+    return {"brief": sim.getbrief(result), "details": result}
+
 
 def runandsavewrapper(args):
-    return sim.runandsaveall(args["workdir"], args["infile"], args["outfilebase"], args["fromexp"], args["toexp"], 
+    return sim.runandsaveall(args["workdir"], args["infile"], args["outfilebase"], args["fromexp"], args["toexp"],
                              args["fromsplit"], args["tosplit"], args["gpu"])
-    
+
+
 # STAGE5 TEST HEURISTICS, COMMUNITY DETECTIONS AND TRAIN&TEST NNs
 @cli.command()
 @click.argument("workdir")
@@ -166,7 +167,7 @@ def crossval(workdir, infile, outfile, seed, processes, fromexp, toexp, fromspli
             outfilebase = infile
     else:
         outfilebase = outfile
-    
+
     start = time.time()            
     if processes == 1:
         sim.runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tosplit, gpu)
@@ -182,8 +183,8 @@ def crossval(workdir, infile, outfile, seed, processes, fromexp, toexp, fromspli
         for idx in range(processes):
             incr += splitincrements[idx]
             splitrange.append(int(fromsplit)+incr)
-            
-        
+
+
         print("Split seprarators:", splitrange)
         
         taskargs = [{"workdir":workdir, 
@@ -195,10 +196,10 @@ def crossval(workdir, infile, outfile, seed, processes, fromexp, toexp, fromspli
                      "tosplit":splitrange[procnum+1], 
                      "gpu":procnum%gpucount}  for procnum in range(processes)]
         print(taskargs)
-        
+
         with Pool(processes) as p:
             resfiles = p.map(runandsavewrapper, taskargs)
-        
+
         # now combine results        
         if (fromexp is None) and (toexp is None):
             outfile_exp_postfix = ""
@@ -211,10 +212,10 @@ def crossval(workdir, infile, outfile, seed, processes, fromexp, toexp, fromspli
             with open(partresultfile,"r") as f:
                 partresults.append(json.load(f)["details"])
         combined_results=combine_splits(partresults)        
-        
+
         with open(os.path.join(workdir, outfilename),"w", encoding="utf-8") as f:
             json.dump(combined_results, f, indent=4, sort_keys=True)
-        
+
     print(f"Finished! Total {time.time()-start:.2f}s.")    
 
 
@@ -245,3 +246,4 @@ def infer(workdir, traindf, inferdf, model, weights):
 
 def main():
     cli()
+    
