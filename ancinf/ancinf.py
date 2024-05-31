@@ -203,19 +203,19 @@ def crossval(workdir, infile, outfile, seed, processes, fromexp, toexp, fromspli
         if (fromexp is None) and (toexp is None):
             outfile_exp_postfix = ""
         else:
-            outfile_exp_postfix = "_e" + str(fromexp) + "-" + str(toexp)  
+            outfile_exp_postfix = "_e" + str(fromexp) + "-" + str(toexp)
         outfile_split_postfix = "_s" + str(fromsplit) + "-" + str(tosplit)
         outfilename = outfilebase + outfile_exp_postfix+outfile_split_postfix + '.results'
         partresults = []
         for partresultfile in resfiles:
             with open(partresultfile, "r") as f:
                 partresults.append(json.load(f)["details"])
-        combined_results=combine_splits(partresults)        
+        combined_results = combine_splits(partresults)
 
         with open(os.path.join(workdir, outfilename),"w", encoding="utf-8") as f:
             json.dump(combined_results, f, indent=4, sort_keys=True)
 
-    print(f"Finished! Total {time.time()-start:.2f}s.")    
+    print(f"Finished! Total {time.time()-start:.2f}s.")
 
 
 # STAGE 4 INFERENCE
@@ -238,7 +238,7 @@ def infer(workdir, traindf, inferdf, model, weights):
     nodes, labels = sim.inference(workdir, traindf, inferdf, model, weights)
     outfilename = inferdf+".inferred"
     result = {"node_"+str(node): lbl for node, lbl in zip(nodes, labels)}
-        
+
     with open(os.path.join(workdir, outfilename), "w", encoding="utf-8") as f:
         json.dump(result, f, indent=4, sort_keys=True)
 
