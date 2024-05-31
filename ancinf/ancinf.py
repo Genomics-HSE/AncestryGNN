@@ -23,29 +23,30 @@ def cli():
 def getparams(datadir, workdir, infile, outfile):
     """Collect parameters of csv files in the DATADIR listed in project file from WORKDIR"""
     if outfile is None:
-        #try to remove .ancinf from infile
+        # try to remove .ancinf from infile
         position = infile.find('.ancinf')
-        if position>0:
+        if position > 0:
             outfile = infile[:position]+'.params'
         else:
             outfile = infile+'.params'
     sim.collectandsaveparams(datadir, workdir, infile, outfile)
     print("Finished!")
 
-    
+
 # STAGE1' PREPROCESS
 @cli.command()
 @click.argument("datadir")
 @click.argument("workdir")
 @click.option("--infile", default="project.ancinf", help="Project file, defaults to project.ancinf")
-@click.option("--outfile", default=None, help="Output file with experiment list, defaults to project file with '.explist' extension")
+@click.option("--outfile", default=None, help="Output file with experiment list, defaults to project "
+              "file with '.explist' extension")
 @click.option("--seed", default=2023, help="Random seed")
 def preprocess(datadir, workdir, infile, outfile, seed):
     """Filter datsets from DATADIR, generate train-val-test splits and experiment list file in WORKDIR"""
     if outfile is None:
         # try to remove .ancinf from infile
         position = infile.find('.ancinf')
-        if position>0:
+        if position > 0:
             outfile = infile[:position]+'.explist'
         else:
             outfile = infile+'.explist'
@@ -59,24 +60,25 @@ def preprocess(datadir, workdir, infile, outfile, seed):
 @cli.command()
 @click.argument("workdir")
 @click.option("--infile", default="project.params", help="File with simulation parameters, defaults to project.params")
-@click.option("--outfile", default=None, help="Output file with experiment list, defaults to project file with '.explist' extension")
+@click.option("--outfile", default=None, help="Output file with experiment list, defaults to project file "
+              "with '.explist' extension")
 @click.option("--seed", default=2023, help="Random seed")
 def simulate(workdir, infile, outfile, seed):
     """Generate ibd graphs, corresponding slpits and experiment list file for parameters in INFILE"""
     if outfile is None:
-        #try to remove .ancinf from infile
+        # try to remove .ancinf from infile
         position = infile.find('.params')
-        if position>0:
+        if position > 0:
             outfile = infile[:position]+'.explist'
         else:
             outfile = infile+'.explist'
-            
+
     rng = np.random.default_rng(seed)
     start = time.time()
     sim.simulateandsave(workdir, infile, outfile, rng)
     print(f"Finished! Total {time.time()-start:.2f}s")
-    
-    
+
+
 # STAGE3 HEURISTICS GNN etc
 def combine_splits(partresults):
     result = {}
@@ -85,7 +87,7 @@ def combine_splits(partresults):
         for dataset in partres:
             if dataset in result:
                 # existing dataset. list experiments and find new
-                existing_exp_ids = [ exp["exp_idx"] for exp in result[dataset] ]
+                existing_exp_ids = [exp["exp_idx"] for exp in result[dataset]]
                 for exp in partres[dataset]:
                     if exp["exp_idx"] in existing_exp_ids:
                         # existing experiment, find it
@@ -97,11 +99,11 @@ def combine_splits(partresults):
                         # classifiers should be the same
                         for classifier in exp["classifiers"]:
                             for metric in exp["classifiers"][classifier]:
-                                if metric!="class_scores":
+                                if metric != "class_scores":
                                     res_exp["classifiers"][classifier][metric]["values"].extend(exp["classifiers"][classifier][metric]["values"])
                                 else:
                                     for pop in exp["classifiers"][classifier]["class_scores"]:
-                                        res_exp["classifiers"][classifier][metric][pop]["values"].extend(exp["classifiers"][classifier][metric][pop]["values"])                                    
+                                        res_exp["classifiers"][classifier][metric][pop]["values"].extend(exp["classifiers"][classifier][metric][pop]["values"])
                     else:
                         # new experiment
                         result[dataset].append(exp)
