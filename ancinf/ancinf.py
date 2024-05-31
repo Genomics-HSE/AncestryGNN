@@ -157,7 +157,7 @@ def runandsavewrapper(args):
 @click.option("--gpu", default=0, help="GPU")
 @click.option("--gpucount", default=1, help="GPU count")
 def crossval(workdir, infile, outfile, seed, processes, fromexp, toexp, fromsplit, tosplit, gpu, gpucount):
-    """Run crossvalidation for classifiers including heuristics, community detections, GNNs and MLP networks"""    
+    """Run crossvalidation for classifiers including heuristics, community detections, GNNs and MLP networks"""
     if outfile is None:
         # try to remove .ancinf from infile
         position = infile.find('.explist')
@@ -193,22 +193,22 @@ def crossval(workdir, infile, outfile, seed, processes, fromexp, toexp, fromspli
                      "toexp": toexp,
                      "fromsplit": splitrange[procnum],
                      "tosplit": splitrange[procnum+1],
-                     "gpu":procnum % gpucount}  for procnum in range(processes)]
+                     "gpu": procnum % gpucount} for procnum in range(processes)]
         print(taskargs)
 
         with Pool(processes) as p:
             resfiles = p.map(runandsavewrapper, taskargs)
 
-        # now combine results        
+        # now combine results
         if (fromexp is None) and (toexp is None):
             outfile_exp_postfix = ""
         else:
-            outfile_exp_postfix = "_e" + str(fromexp) +"-"+ str(toexp)  
-        outfile_split_postfix = "_s" + str(fromsplit) +"-"+ str(tosplit)
-        outfilename = outfilebase+outfile_exp_postfix+outfile_split_postfix+'.results'
+            outfile_exp_postfix = "_e" + str(fromexp) + "-" + str(toexp)  
+        outfile_split_postfix = "_s" + str(fromsplit) + "-" + str(tosplit)
+        outfilename = outfilebase + outfile_exp_postfix+outfile_split_postfix + '.results'
         partresults = []
         for partresultfile in resfiles:
-            with open(partresultfile,"r") as f:
+            with open(partresultfile, "r") as f:
                 partresults.append(json.load(f)["details"])
         combined_results=combine_splits(partresults)        
 
@@ -228,21 +228,20 @@ def crossval(workdir, infile, outfile, seed, processes, fromexp, toexp, fromspli
 def infer(workdir, traindf, inferdf, model, weights):
     """
     traindf: Dataset on which the model was trained
-    
+
     inferdf, Dataset with nodes with classes to be inferred (labelled 'unknown')
-    
+
     model: Model name
-    
+
     weights: Weights file
     """
     nodes, labels = sim.inference(workdir, traindf, inferdf, model, weights)
     outfilename = inferdf+".inferred"
-    result = {"node_"+str(node):lbl for node, lbl in zip(nodes, labels)}
+    result = {"node_"+str(node): lbl for node, lbl in zip(nodes, labels)}
         
-    with open(os.path.join(workdir, outfilename),"w", encoding="utf-8") as f:
-            json.dump(result, f, indent=4, sort_keys=True)
+    with open(os.path.join(workdir, outfilename), "w", encoding="utf-8") as f:
+        json.dump(result, f, indent=4, sort_keys=True)
 
 
 def main():
     cli()
-    
