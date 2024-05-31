@@ -430,35 +430,6 @@ def get_argmax_and_confidence(arr):
     return np.argmax(arr), conf
 
 
-def save_features_and_prediction(fname, truth, prediction, longest, total, links):
-    def prr(array):        
-        result = ""
-        for idx in range(array.shape[0]):
-            result = result+" "+str(array[idx])        
-        return result
-        
-    def brr(links, longest, total):
-        result = f"{links[0]:.0f}({longest[0]:.2f}:{total[0]:.2f})" 
-        for idx in range(1, links.shape[0]):
-            result = result + ";" + f"{links[idx]:.0f}({longest[idx]:.2f}:{total[idx]:.2f})"
-        return result
-        
-    
-    with open(fname,"w") as f:
-        stats = "lbl0"
-        for idx in range(1, links[0].shape[0]):
-            stats = stats+";lbl"+str(idx)
-        f.write(f"idx;node_id;truth;predicted;error;{stats}\n")
-        flag = "!"
-        for nd in range(nodecount):            
-            if truth[nd]!=prediction[nd]:                  
-                stats = brr(links[nd], longest[nd], total[nd])
-                f.write(f"{nd};{idxtranslator[nd]};{truth[nd]};{prediction[nd]};{flag};{stats}\n")
-        flag = ""
-        for nd in range(nodecount):            
-            if truth[nd]==prediction[nd]:                  
-                stats = brr(links[nd], longest[nd], total[nd])
-                f.write(f"{nd};{idxtranslator[nd]};{truth[nd]};{prediction[nd]};{flag};{stats}\n")
 
 
 def get_most_confident_prediction(featuredict, featureweights, featurepriority):    
