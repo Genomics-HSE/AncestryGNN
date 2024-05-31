@@ -1207,7 +1207,7 @@ class Trainer:
         
 
 
-def independent_test(model_path, model_cls, df, vertex_id, gpu_id, test_type):
+def independent_test(model_path, model_cls, df, vertex_id, gpu_id, test_type, mask_nodes=None):
     
     dp = DataProcessor(df.copy(), is_path_object=True)
     dp.classes.remove('unknown')
@@ -1216,11 +1216,21 @@ def independent_test(model_path, model_cls, df, vertex_id, gpu_id, test_type):
     train_split = np.array(list(map(lambda x: int(x[5:]), unique_nodes)))
     valid_split = np.array([vertex_id])
     test_split = np.array([vertex_id])
-    dp.load_train_valid_test_nodes(train_split, valid_split, test_split, 'numpy')
+    if mask_nodes is not None:
+        mask_data = np.array([mask_nodes])
+        train_split = np.array(list(filter(lambda node: node not in mask_data, train_split)))
+        valid_split = np.array(list(filter(lambda node: node not in mask_data, valid_split)))
+        test_split = np.array(list(filter(lambda node: node not in mask_data, test_split)))
+    
+    dp.load_train_valid_test_nodes(train_split, valid_split, test_split, 'numpy', mask_path=mask_nodes)
     if test_type == 'one_hot':
         dp.make_train_valid_test_datasets_with_numba('one_hot', 'homogeneous', 'multiple', 'multiple', 'debug_debug', skip_train_val=True)
     elif test_type == 'graph_based':
         dp.make_train_valid_test_datasets_with_numba('graph_based', 'homogeneous', 'one', 'multiple', 'debug_debug', skip_train_val=True)
+    elif test_type == 'graph_based_masked' and mask_node is not None:
+        dp.make_train_valid_test_datasets_with_numba('graph_based', 'homogeneous', 'one', 'multiple', 'debug_debug', skip_train_val=True, masking=True)
+    elif test_type == 'one_hot_masked' and mask_node is not None:
+        dp.make_train_valid_test_datasets_with_numba('one_hot', 'homogeneous', 'multiple', 'multiple', 'debug_debug', skip_train_val=True, masking=True)  
     device = torch.device(f"cuda:{gpu_id}" if torch.cuda.is_available() else 'cpu')
     model = model_cls(dp.array_of_graphs_for_testing[0]).to(device)
     model.load_state_dict(torch.load(model_path))
