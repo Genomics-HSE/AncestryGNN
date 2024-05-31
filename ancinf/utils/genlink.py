@@ -615,13 +615,13 @@ class DataProcessor:
         if feature_type == 'graph_based' and masking:
             graph = Data.from_dict(
                 {'y': torch.tensor(targets, dtype=torch.long), 'x': torch.tensor(features),
-                 'weight': torch.log(torch.tensor(weighted_edges[:, 2])) if log_edge_weights else torch.tensor(weighted_edges[:, 2]),
+                 'weight': -torch.log(torch.tensor(weighted_edges[:, 2]) / 6600) if log_edge_weights else torch.tensor(weighted_edges[:, 2]),
                  'edge_index': torch.tensor(weighted_edges[:, :2].T, dtype=torch.long),
                  'mask': node_mask})
         else:
             graph = Data.from_dict(
                 {'y': torch.tensor(targets, dtype=torch.long), 'x': torch.tensor(features),
-                 'weight': torch.log(torch.tensor(weighted_edges[:, 2])) if log_edge_weights else torch.tensor(weighted_edges[:, 2]),
+                 'weight': -torch.log(torch.tensor(weighted_edges[:, 2]) / 6600) if log_edge_weights else torch.tensor(weighted_edges[:, 2]),
                  'edge_index': torch.tensor(weighted_edges[:, :2].T, dtype=torch.long)})
 
         graph.num_classes = len(self.classes) - 1 if masking else len(self.classes)
@@ -2036,6 +2036,22 @@ class TAGConv_3l_512h_w_k3(torch.nn.Module):
         x = self.conv3(x, edge_index, edge_attr)
         return x
     
+    
+class TAGConv_3l_1024h_w_k3(torch.nn.Module):
+    def __init__(self, data):
+        super(TAGConv_3l_1024h_w_k3, self).__init__()
+        self.conv1 = TAGConv(data.num_features, 1024)
+        self.conv2 = TAGConv(1024, 1024)
+        self.conv3 = TAGConv(1024, int(data.num_classes))
+
+    def forward(self, data):
+        x, edge_index, edge_attr = data.x.float(), data.edge_index, data.weight.float()
+        x = F.elu(self.conv1(x, edge_index, edge_attr))
+        x = F.elu(self.conv2(x, edge_index, edge_attr))
+        x = self.conv3(x, edge_index, edge_attr)
+        return x
+    
+    
 class TAGConv_3l_512h_nw_k3(torch.nn.Module):
     def __init__(self, data):
         super(TAGConv_3l_512h_nw_k3, self).__init__()
@@ -2319,6 +2335,76 @@ class SAGEConv_3l_128h(torch.nn.Module):
         x = F.elu(self.conv2(x, edge_index))
         x = self.conv3(x, edge_index)
         return x
+    
+    
+class SAGEConv_3l_512h(torch.nn.Module):
+    def __init__(self, data):
+        super(SAGEConv_3l_512h, self).__init__()
+        self.conv1 = SAGEConv(data.num_features, 512)
+        self.conv2 = SAGEConv(512, 512)
+        self.conv3 = SAGEConv(512, int(data.num_classes))
+
+    def forward(self, data):
+        x, edge_index, edge_attr = data.x.float(), data.edge_index, data.weight.float()
+        x = F.elu(self.conv1(x, edge_index))
+        x = F.elu(self.conv2(x, edge_index))
+        x = self.conv3(x, edge_index)
+        return x
+    
+    
+class SAGEConv_9l_512h(torch.nn.Module):
+    def __init__(self, data):
+        super(SAGEConv_9l_512h, self).__init__()
+        self.conv1 = SAGEConv(data.num_features, 512)
+        self.conv2 = SAGEConv(512, 512)
+        self.conv3 = SAGEConv(512, 512)
+        self.conv4 = SAGEConv(512, 512)
+        self.conv5 = SAGEConv(512, 512)
+        self.conv6 = SAGEConv(512, 512)
+        self.conv7 = SAGEConv(512, 512)
+        self.conv8 = SAGEConv(512, 512)
+        self.conv9 = SAGEConv(512, int(data.num_classes))
+
+    def forward(self, data):
+        x, edge_index, edge_attr = data.x.float(), data.edge_index, data.weight.float()
+        x = F.elu(self.conv1(x, edge_index))
+        x = F.elu(self.conv2(x, edge_index))
+        x = F.elu(self.conv3(x, edge_index))
+        x = F.elu(self.conv4(x, edge_index))
+        x = F.elu(self.conv5(x, edge_index))
+        x = F.elu(self.conv6(x, edge_index))
+        x = F.elu(self.conv7(x, edge_index))
+        x = F.elu(self.conv8(x, edge_index))
+        x = self.conv9(x, edge_index)
+        return x
+    
+    
+class SAGEConv_9l_128h(torch.nn.Module):
+    def __init__(self, data):
+        super(SAGEConv_9l_128h, self).__init__()
+        self.conv1 = SAGEConv(data.num_features, 128)
+        self.conv2 = SAGEConv(128, 128)
+        self.conv3 = SAGEConv(128, 128)
+        self.conv4 = SAGEConv(128, 128)
+        self.conv5 = SAGEConv(128, 128)
+        self.conv6 = SAGEConv(128, 128)
+        self.conv7 = SAGEConv(128, 128)
+        self.conv8 = SAGEConv(128, 128)
+        self.conv9 = SAGEConv(128, int(data.num_classes))
+
+    def forward(self, data):
+        x, edge_index, edge_attr = data.x.float(), data.edge_index, data.weight.float()
+        x = F.elu(self.conv1(x, edge_index))
+        x = F.elu(self.conv2(x, edge_index))
+        x = F.elu(self.conv3(x, edge_index))
+        x = F.elu(self.conv4(x, edge_index))
+        x = F.elu(self.conv5(x, edge_index))
+        x = F.elu(self.conv6(x, edge_index))
+        x = F.elu(self.conv7(x, edge_index))
+        x = F.elu(self.conv8(x, edge_index))
+        x = self.conv9(x, edge_index)
+        return x
+    
 
 class ChebConv_3l_128h_w_k3(torch.nn.Module):
     def __init__(self, data):
