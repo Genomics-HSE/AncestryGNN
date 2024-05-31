@@ -1,6 +1,5 @@
 ## Graph neural network application for accurate ancestry inference from Identity by Descent Graphs
 
-Supplementary code 
 
 The pipeline below can be used in following ways:
 1. IBD dataset + .ancinf file ---(stage1)---> .params file ---(stage2)---> simulated datasets + .explist file ---(stage3)---> .results file
