@@ -14,8 +14,9 @@
         "offset": 8.0    
     },
     "crossvalidation":
-    {        
+    {   
         "cleanshare": 0.2,
+        "maskshare": 0.75,
         "valshare": 0.2,
         "testshare": 0.2,
         "split_count": 1,
@@ -23,9 +24,7 @@
         "heuristics": ["EdgeCount", "EdgeCountPerClassize", "SegmentCount", "LongestIbd", "IbdSum", "IbdSumPerEdge"],
         "community_detection": [],
         "mlps": [],
-        "gnns": {"TAGConv_3l_512h_w_k3":{"learning_rate":0.123, "param2":34},
-                 "TAGConv_3l_512h_w_k3_gb":{"learning_rate":0.123, "param2":34}
-                }
+        "gnns": ["TAGConv_3l_512h_w_k3", "TAGConv_3l_512h_w_k3_gb"]
     },
     "datasets":
     {        

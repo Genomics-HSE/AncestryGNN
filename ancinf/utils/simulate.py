@@ -597,9 +597,26 @@ def inference(workdir, traindf, inferdf, model, model_weights, gpu=0):
     
     return cleannodes, inferredlabels
     
-           
+def getfeaturetype(nnclass, masked_nodes):
+    if masked_nodes is None:
+        postfix = ""
+    else:
+        postfix = "_masked"
+        
+    if nnclass in ["MLP_3l_128h", "MLP_3l_512h", "MLP_9l_128h", "MLP_9l_512h"]:
+        features = 'graph_based'
+    else:
+        # gnn
+        if nnclass[-3:] == '_gb': 
+            features = 'graph_based'
+            train_dataset_type = "one"
+        else:
+            features = 'one_hot'
+            train_dataset_type = 'multiple'
 
-def runcleantest(cleanexpresults, cleannodes, cleannodelabels, cleantestdataframes, gnnlist, run_base_name, gpu):
+    return features + postfix
+
+def runcleantest(cleanexpresults, cleannodes, cleannodelabels, cleantestdataframes, gnnlist, run_base_name, gpu, masked_nodes):
     for nnclass in gnnlist:
         run_name = os.path.join(run_base_name + "_"+nnclass, "model_best.bin" )
         inferredlabels = []
@@ -608,7 +625,8 @@ def runcleantest(cleanexpresults, cleannodes, cleannodelabels, cleantestdatafram
             print(cleantestdataframes[node])
             #cleantestdataframes[node].to_csv("temp.csv")
             #TODO fix test_type depending on the network
-            testresult = independent_test(run_name, NNs[nnclass], cleantestdataframes[node], node, gpu, test_type='one_hot' )            
+            feature_type = getfeaturetype(nnclass, masked_nodes)
+            testresult = independent_test(run_name, NNs[nnclass], cleantestdataframes[node], node, gpu, feature_type, masked_nodes )
             print("clean test classification", testresult)
             inferredlabels.append( testresult )
         runresult = f1_score(cleannodelabels, inferredlabels, average='macro')
@@ -836,7 +854,7 @@ def runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tospl
                 #now clean test if requested
                 if ("cleanfile" in exp) and (gnnlist != []):
                     print("Running clean inference test")                
-                    runcleantest(cleanexpresults, cleannodes, cleannodelabels, cleantestdataframes, gnnlist, run_base_name, gpu)  
+                    runcleantest(cleanexpresults, cleannodes, cleannodelabels, cleantestdataframes, gnnlist, run_base_name, gpu, maskednodes)  
                     for nnclass in cleanexpresults:
                         datasetresults[-1]["classifiers"][nnclass]["f1_macro"].update({"clean_mean": np.average(cleanexpresults[nnclass]), 
                                              "clean_std": np.std(cleanexpresults[nnclass]), 
