@@ -3,20 +3,13 @@ import numpy as np
 import time
 from multiprocessing import Pool
 
-from .utils import simulate as sim 
-from .utils import runheuristic
-import json, os
-
-#@click.option("--count", default=1, help="Number of greetings.")
-#@click.option("--name", prompt="Your name", help="The person to greet.")
-#click.echo(f"Hello, {folder}, {out}!")
-
-
+from .utils import simulate as sim
+import json
+import os
 
 @click.group()
 def cli():
     pass
-
 
 #STAGE1 GETPARAMS
 @cli.command()
