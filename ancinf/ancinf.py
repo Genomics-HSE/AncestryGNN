@@ -212,7 +212,7 @@ def crossval(workdir, infile, outfile, seed, processes, fromexp, toexp, fromspli
                 partresults.append(json.load(f)["details"])
         combined_results = combine_splits(partresults)
 
-        with open(os.path.join(workdir, outfilename),"w", encoding="utf-8") as f:
+        with open(os.path.join(workdir, outfilename), "w", encoding="utf-8") as f:
             json.dump(combined_results, f, indent=4, sort_keys=True)
 
     print(f"Finished! Total {time.time()-start:.2f}s.")
