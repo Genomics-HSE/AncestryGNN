@@ -18,7 +18,8 @@ def cli():
 @click.argument("datadir")
 @click.argument("workdir")
 @click.option("--infile", default="project.ancinf", help="Project file, defaults to project.ancinf")
-@click.option("--outfile", default=None, help="Output file with simulation parameters, defaults to project file with '.params' extension")
+@click.option("--outfile", default=None, help="Output file with simulation parameters, " \
+              "defaults to project file with '.params' extension")
 def getparams(datadir, workdir, infile, outfile):
     """Collect parameters of csv files in the DATADIR listed in project file from WORKDIR"""    
     if outfile is None:
