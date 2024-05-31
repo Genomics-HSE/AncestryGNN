@@ -578,7 +578,16 @@ def inference(workdir, traindf, inferdf, model, model_weights, gpu=0):
     
     dfmain = pd.read_csv(traindf)
     dfclean = pd.read_csv(inferdf)    
-    #find them
+    
+    masked_nodes = None
+    # get masked nodes 
+    pairs, weights, labels, labeldict, idxtranslator = load_pure( traindf, debug=False)
+    if "masked" in labeldict:
+        unklblidx = labeldict["masked"]
+        masked_nodes = idxtranslator[labels == unklblidx]
+    
+    feature_type = getfeaturetype(model, masked_nodes)
+    
     pairs, weights, labels, labeldict, idxtranslator = load_pure( inferdf, debug=False)
     unklblidx = labeldict["unknown"]
     cleannodes = list( idxtranslator[ labels == unklblidx ] )
@@ -591,12 +600,13 @@ def inference(workdir, traindf, inferdf, model, model_weights, gpu=0):
         onenodedf = pd.concat([dfmain, fltr1, fltr2])                    
         df = onenodedf.reset_index(drop=True)                         
         #TODO fix test_type depending on the network
-        testresult = independent_test(model_weights, NNs[model], df, node, gpu, test_type='one_hot' )        
+        testresult = independent_test(model_weights, NNs[model], df, node, gpu, feature_type, masked_nodes )
         print("inference results", testresult)
         inferredlabels.append( testresult )
     
     return cleannodes, inferredlabels
-    
+
+
 def getfeaturetype(nnclass, masked_nodes):
     if masked_nodes is None:
         postfix = ""
