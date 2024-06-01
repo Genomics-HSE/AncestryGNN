@@ -813,10 +813,22 @@ def runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tospl
                     heurpartitions = partitions["partitions"]
                 heuresult = runheur(heurdatafile, partitions=heurpartitions, conseq=False, debug=False, filter_params = None)
                 runtime = time.time() - starttime                
-                for heurclass in heurlist: 
-                    expresults[heurclass] = [ {"f1_macro": res, 
-                                               "time": runtime/len(heuresult[heurclass]["values"]) 
-                                              } for res in heuresult[heurclass]["values"] ]
+                for heurclass in heurlist:
+                    expresults[heurclass] = heuresult[heurclass] 
+                    for expr in expresults[heurclass]:
+                        expr["time"] = runtime/len(heuresult[heurclass])
+                    # expresults[heurclass] = []                    
+                    # for eidx in range(len(heuresult[heurclass]["f1_macro"]["values"]))
+                    #     exprest = {"time": runtime/len(heuresult[heurclass]["f1_macro"]["values"])}
+                    #     for metric in heuresult[heurclass]:
+                    #         if metric != "class_scores":
+                    #             exprest[metric] = heuresult[heurclass][metric]["values"][eidx]
+                    #         else:
+                    #             exprest["class_scores"] = {}
+                    #             for cl in heuresult[heurclass]["class_scores"]:
+                    #                 exprest["class_scores"][cl] = heuresult[heurclass]["class_scores"][cl]["values"][eidx]
+                    #     expresults[heurclass].append(exprest)
+                        
             
             #2. GNNs and MLPs partition by partition
             #if clean test is requiered we prepare dataframes with just one unlabelled node
