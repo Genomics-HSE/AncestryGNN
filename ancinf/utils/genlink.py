@@ -974,8 +974,17 @@ class Trainer:
         self.optimize_memory_transfer = optimize_memory_transfer
         self.seed = seed
         
-        for k, v in model_params.items():
-            setattr(self, k, v)
+        if model_params is not None:
+            for k, v in model_params.items():
+                if k == 'weight':
+                    setattr(self, k, torch.tensor(v).to(self.device))
+                else:
+                    setattr(self, k, v)
+                
+            print(self.weight)
+            print(self.learning_rate)
+            print(self.data.classes)
+            print(self.weight_decay)
 
     def compute_metrics_cross_entropy(self, graphs, mask=False, phase=None):
         y_true = []
@@ -1111,7 +1120,7 @@ class Trainer:
         self.model = self.model_cls(self.data.array_of_graphs_for_training[0]).to(self.device) # just initialize the parameters of the model
         criterion = self.loss_fn(weight=self.weight)
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
-        scheduler = StepLR(optimizer, step_size=500, gamma=0.1)
+        scheduler = StepLR(optimizer, step_size=50, gamma=0.95)
         print(f'Training for data: {self.data.dataset_name}')
         self.max_f1_score_macro = 0
         self.patience_counter = 0
@@ -1143,6 +1152,8 @@ class Trainer:
                         optimizer.step()
                         scheduler.step()
                         self.data.array_of_graphs_for_training[n].to('cpu')
+                        
+                    print(f'Mean loss: {np.mean(mean_epoch_loss)}')
 
                     y_true, y_pred = self.compute_metrics_cross_entropy(self.data.array_of_graphs_for_training)
 
@@ -1956,25 +1967,25 @@ class MLP_9l_512h(torch.nn.Module):
         h = self.fc9(h)
         return h
 
-class TAGConv_3l_128h_w_k3_g_norm_mem_pool(torch.nn.Module):
+class TAGConv_3l_512h_w_k3_g_norm_mem_pool(torch.nn.Module):
     def __init__(self, data):
-        super(TAGConv_3l_128h_w_k3_g_norm_mem_pool, self).__init__()
-        self.conv1 = TAGConv(int(data.num_classes), 128)
-        self.conv2 = TAGConv(128, 128)
-        self.conv3 = TAGConv(128, int(data.num_classes))
-        self.n1 = GraphNorm(128)
-        self.n2 = GraphNorm(128)
-        self.m1 = MemPooling(128, 128, 3, 3)
-        self.m2 = MemPooling(128, 128, 3, 3)
+        super(TAGConv_3l_512h_w_k3_g_norm_mem_pool, self).__init__()
+        self.conv1 = TAGConv(int(data.num_features), 512)
+        self.conv2 = TAGConv(512, 512)
+        self.conv3 = TAGConv(512, int(data.num_classes))
+        self.n1 = GraphNorm(512)
+        self.n2 = GraphNorm(512)
+        self.m1 = MemPooling(512, 512, 3, data.num_classes)
+        self.m2 = MemPooling(512, 512, 3, data.num_classes)
 
     def forward(self, data):
         x, edge_index, edge_attr = data.x.float(), data.edge_index, data.weight.float()
         x = F.elu(self.conv1(x, edge_index, edge_attr))
         x = self.n1(x)
-        x = self.m1(x)
+        # x = self.m1(x)
         x = F.elu(self.conv2(x, edge_index, edge_attr))
         x = self.n2(x)
-        x = self.m2(x)
+        # x = self.m2(x)
         x = self.conv3(x, edge_index, edge_attr)
         return x
     
@@ -2040,14 +2051,18 @@ class TAGConv_3l_512h_w_k3(torch.nn.Module):
 class TAGConv_3l_1024h_w_k3(torch.nn.Module):
     def __init__(self, data):
         super(TAGConv_3l_1024h_w_k3, self).__init__()
-        self.conv1 = TAGConv(data.num_features, 1024)
-        self.conv2 = TAGConv(1024, 1024)
-        self.conv3 = TAGConv(1024, int(data.num_classes))
+        self.conv1 = TAGConv(data.num_features, 1024, aggr='mean')
+        self.n1 = GraphNorm(1024)
+        self.conv2 = TAGConv(1024, 1024, aggr='mean')
+        self.n2 = GraphNorm(1024)
+        self.conv3 = TAGConv(1024, int(data.num_classes), aggr='mean')
 
     def forward(self, data):
         x, edge_index, edge_attr = data.x.float(), data.edge_index, data.weight.float()
         x = F.elu(self.conv1(x, edge_index, edge_attr))
+        x = self.n1(x)
         x = F.elu(self.conv2(x, edge_index, edge_attr))
+        x = self.n2(x)
         x = self.conv3(x, edge_index, edge_attr)
         return x
     
@@ -2173,8 +2188,7 @@ class GCNConv_3l_512h_w(torch.nn.Module):
         x = F.elu(self.conv2(x, edge_index, edge_attr))
         x = self.conv3(x, edge_index, edge_attr)
         return x 
-    
-  
+     
 class GCNConv_9l_128h_w(torch.nn.Module):
     def __init__(self, data):
         super(GCNConv_9l_128h_w, self).__init__()

@@ -31,7 +31,7 @@ from .genlink import DataProcessor, BaselineMethods, NullSimulator, Trainer,  TA
                   MLP_9l_512h, \
 GINNet_narrow_short, GINNet_wide_short, GINNet_narrow_long, GINNet_wide_long, \
 AttnGCN_narrow_short, AttnGCN_wide_short, AttnGCN_narrow_long,  AttnGCN_wide_long, \
-SAGEConv_3l_128h, SAGEConv_3l_512h, SAGEConv_9l_128h, SAGEConv_9l_512h
+SAGEConv_3l_128h, SAGEConv_3l_512h, SAGEConv_9l_128h, SAGEConv_9l_512h, TAGConv_3l_512h_w_k3_g_norm_mem_pool
     
 NNs = {
     "MLP_3l_128h": MLP_3l_128h,
@@ -77,7 +77,9 @@ NNs = {
     "SAGEConv_9l_128h": SAGEConv_9l_128h,
     "SAGEConv_9l_128h_gb": SAGEConv_9l_128h,
     "SAGEConv_9l_512h": SAGEConv_9l_512h,
-    "SAGEConv_9l_512h_gb": SAGEConv_9l_512h
+    "SAGEConv_9l_512h_gb": SAGEConv_9l_512h,
+    "TAGConv_3l_512h_w_k3_g_norm_mem_pool": TAGConv_3l_512h_w_k3_g_norm_mem_pool,
+    "TAGConv_3l_512h_w_k3_g_norm_mem_pool_gb": TAGConv_3l_512h_w_k3_g_norm_mem_pool
     
 }
 
