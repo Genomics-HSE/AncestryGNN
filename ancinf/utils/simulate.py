@@ -580,7 +580,16 @@ def inference(workdir, traindf, inferdf, model, model_weights, gpu=0):
     
     dfmain = pd.read_csv(traindf)
     dfclean = pd.read_csv(inferdf)    
-    #find them
+    
+    masked_nodes = None
+    # get masked nodes 
+    pairs, weights, labels, labeldict, idxtranslator = load_pure( traindf, debug=False)
+    if "masked" in labeldict:
+        unklblidx = labeldict["masked"]
+        masked_nodes = idxtranslator[labels == unklblidx]
+    
+    feature_type = getfeaturetype(model, masked_nodes)
+    
     pairs, weights, labels, labeldict, idxtranslator = load_pure( inferdf, debug=False)
     unklblidx = labeldict["unknown"]
     cleannodes = list( idxtranslator[ labels == unklblidx ] )
@@ -593,15 +602,33 @@ def inference(workdir, traindf, inferdf, model, model_weights, gpu=0):
         onenodedf = pd.concat([dfmain, fltr1, fltr2])                    
         df = onenodedf.reset_index(drop=True)                         
         #TODO fix test_type depending on the network
-        testresult = independent_test(model_weights, NNs[model], df, node, gpu, test_type='one_hot' )        
+        testresult = independent_test(model_weights, NNs[model], df, node, gpu, feature_type, masked_nodes )
         print("inference results", testresult)
         inferredlabels.append( testresult )
     
     return cleannodes, inferredlabels
-    
-           
 
-def runcleantest(cleanexpresults, cleannodes, cleannodelabels, cleantestdataframes, gnnlist, run_base_name, gpu):
+
+def getfeaturetype(nnclass, masked_nodes):
+    if masked_nodes is None:
+        postfix = ""
+    else:
+        postfix = "_masked"
+        
+    if nnclass in ["MLP_3l_128h", "MLP_3l_512h", "MLP_9l_128h", "MLP_9l_512h"]:
+        features = 'graph_based'
+    else:
+        # gnn
+        if nnclass[-3:] == '_gb': 
+            features = 'graph_based'
+            train_dataset_type = "one"
+        else:
+            features = 'one_hot'
+            train_dataset_type = 'multiple'
+
+    return features + postfix
+
+def runcleantest(cleanexpresults, cleannodes, cleannodelabels, cleantestdataframes, gnnlist, run_base_name, gpu, masked_nodes):
     for nnclass in gnnlist:
         run_name = os.path.join(run_base_name + "_"+nnclass, "model_best.bin" )
         inferredlabels = []
@@ -610,7 +637,8 @@ def runcleantest(cleanexpresults, cleannodes, cleannodelabels, cleantestdatafram
             print(cleantestdataframes[node])
             #cleantestdataframes[node].to_csv("temp.csv")
             #TODO fix test_type depending on the network
-            testresult = independent_test(run_name, NNs[nnclass], cleantestdataframes[node], node, gpu, test_type='one_hot' )            
+            feature_type = getfeaturetype(nnclass, masked_nodes)
+            testresult = independent_test(run_name, NNs[nnclass], cleantestdataframes[node], node, gpu, feature_type, masked_nodes )
             print("clean test classification", testresult)
             inferredlabels.append( testresult )
         runresult = f1_score(cleannodelabels, inferredlabels, average='macro')
@@ -787,10 +815,22 @@ def runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tospl
                     heurpartitions = partitions["partitions"]
                 heuresult = runheur(heurdatafile, partitions=heurpartitions, conseq=False, debug=False, filter_params = None)
                 runtime = time.time() - starttime                
-                for heurclass in heurlist: 
-                    expresults[heurclass] = [ {"f1_macro": res, 
-                                               "time": runtime/len(heuresult[heurclass]["values"]) 
-                                              } for res in heuresult[heurclass]["values"] ]
+                for heurclass in heurlist:
+                    expresults[heurclass] = heuresult[heurclass] 
+                    for expr in expresults[heurclass]:
+                        expr["time"] = runtime/len(heuresult[heurclass])
+                    # expresults[heurclass] = []                    
+                    # for eidx in range(len(heuresult[heurclass]["f1_macro"]["values"]))
+                    #     exprest = {"time": runtime/len(heuresult[heurclass]["f1_macro"]["values"])}
+                    #     for metric in heuresult[heurclass]:
+                    #         if metric != "class_scores":
+                    #             exprest[metric] = heuresult[heurclass][metric]["values"][eidx]
+                    #         else:
+                    #             exprest["class_scores"] = {}
+                    #             for cl in heuresult[heurclass]["class_scores"]:
+                    #                 exprest["class_scores"][cl] = heuresult[heurclass]["class_scores"][cl]["values"][eidx]
+                    #     expresults[heurclass].append(exprest)
+                        
             
             #2. GNNs and MLPs partition by partition
             #if clean test is requiered we prepare dataframes with just one unlabelled node
@@ -838,7 +878,7 @@ def runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tospl
                 #now clean test if requested
                 if ("cleanfile" in exp) and (gnnlist != []):
                     print("Running clean inference test")                
-                    runcleantest(cleanexpresults, cleannodes, cleannodelabels, cleantestdataframes, gnnlist, run_base_name, gpu)  
+                    runcleantest(cleanexpresults, cleannodes, cleannodelabels, cleantestdataframes, gnnlist, run_base_name, gpu, maskednodes)  
                     for nnclass in cleanexpresults:
                         datasetresults[-1]["classifiers"][nnclass]["f1_macro"].update({"clean_mean": np.average(cleanexpresults[nnclass]), 
                                              "clean_std": np.std(cleanexpresults[nnclass]), 

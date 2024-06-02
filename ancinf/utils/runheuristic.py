@@ -1,4 +1,4 @@
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, accuracy_score
 
 import numpy as np
 import networkx as nx
@@ -46,14 +46,21 @@ def getf1macro(grph, labels, labeldict, pairs, trns, trainnodeclasses, valnodecl
     for c in trainnodeclasses:
         trainvalnodeclasses[c] = np.concatenate((trainnodeclasses[c], valnodeclasses[c]))
     trainnodes, valnodes, testnodes = bh.gettrainvaltestnodes(trainnodeclasses, valnodeclasses, testnodeclasses)    
-    testlabels = labels[testnodes]
+    testlabels = labels[testnodes]    
     featuredict = bh.getfeatures(grph, testnodes, trainvalnodeclasses, labeldict, pairs, trns )
     simplepredictions = bh.getsimplepred(featuredict)
     
     result = {}
     for feature in simplepredictions: 
         prediction = simplepredictions[feature][testnodes]        
-        result[feature] =  f1_score(testlabels, prediction, average='macro')
+        result[feature] = {}
+        result[feature]["f1_macro"] = f1_score(testlabels, prediction, average='macro')
+        result[feature]["f1_weighted"] = f1_score(testlabels, prediction, average='weighted')
+        result[feature]["accuracy"] =  accuracy_score(testlabels, prediction)
+        result[feature]["class_scores"] = {}
+        for cl in labeldict:
+            result[feature]["class_scores"][cl] = f1_score(testlabels, prediction, average='macro', labels=[labeldict[cl]])
+        
     return result
 
 #internal randomize
@@ -85,11 +92,11 @@ def collectmacrosforrandompartitions(grph, labels, labeldict, pairs, trns, ncls,
 #or external saved partitioning
 def collectmacrosforstoredpartitions(grph, labels, labeldict, pairs, trns, ncls, rng, partitions, conseq):
     featuremacro = {
-        'IbdSumPerEdge': [], 
-        'IbdSum': [], 
-        'LongestIbd': [], 
-        'SegmentCount': [], 
-        'EdgeCountPerClassize': [], 
+        'IbdSumPerEdge': [],
+        'IbdSum': [],
+        'LongestIbd': [],
+        'SegmentCount': [],
+        'EdgeCountPerClassize': [],
         'EdgeCount': []}
     
     for idx, partition in enumerate(partitions):
@@ -110,8 +117,9 @@ def collectmacrosforstoredpartitions(grph, labels, labeldict, pairs, trns, ncls,
                 print(msg)
         
         f1s = getf1macro(grph, labels, labeldict, pairs, trns, trainnodeclasses, valnodeclasses, testnodeclasses)
-        for feature in f1s:
-            featuremacro[feature].append(f1s[feature])   
+        for feature in f1s:            
+            featuremacro[feature].append(f1s[feature])
+        
     return featuremacro
 
 def run(datafile, valshare=None, testshare=None, itercount=None, partitions=None, conseq=False, debug=True, filter_params = None, rng=None):
@@ -132,17 +140,8 @@ def run(datafile, valshare=None, testshare=None, itercount=None, partitions=None
         collectedmacros = collectmacrosforrandompartitions(grph, labels, labeldict, pairs, trns, ncls, rng, itercount, valshare, testshare)
     else: 
         collectedmacros = collectmacrosforstoredpartitions(grph, labels, labeldict, pairs, trns, ncls, rng, partitions, conseq)
-    result = {}
-    if debug:
-        print("====================================")
-        print("+++++Results for "+ datafile+ "+++++")
-    for feature in collectedmacros:
-        if debug:
-            print(f"{feature} f1 macro mean: {np.average(collectedmacros[feature]):.4f} std: {np.std(collectedmacros[feature]):.4f}" )
-        result[feature] = {"mean": np.average(collectedmacros[feature]), 
-                           "std": np.std(collectedmacros[feature]), 
-                           "values":collectedmacros[feature] }
-    return result
+    
+    return collectedmacros
         
     
 def runheuristics(workdir, infile, rng):
