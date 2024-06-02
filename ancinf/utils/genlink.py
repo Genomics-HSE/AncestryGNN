@@ -1017,8 +1017,8 @@ class Trainer:
                 for i in tqdm(range(len(graphs)), desc='Compute metrics', disable=self.disable_printing):
                     if phase=='training':
                         p = F.softmax(self.model(graphs[i].to(self.device)),
-                                      dim=0).cpu().detach().numpy()
-                        p = p[graphs[i].mask]
+                                      dim=0)
+                        p = p[graphs[i].mask].cpu().detach().numpy()
                         y_pred = np.argmax(p, axis=1)
                         y_true = graphs[i].y.cpu().detach()
                     elif phase=='scoring':
