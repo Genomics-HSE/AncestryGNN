@@ -39,10 +39,16 @@
             },
             {
                 "model": "IbdSumPerEdge"
+            },            
+            {
+                "model":"TAGConv_3l_512h_w_k3",
+                "title":"TAGCONV",
+                "learning_rate":0.123,
+                "param2":34
             },
             {
                 "model":"TAGConv_3l_512h_w_k3_gb",
-                "title":"TAGCONV2",
+                "title":"TAGCONV",
                 "learning_rate":0.123,
                 "param2":34
             }

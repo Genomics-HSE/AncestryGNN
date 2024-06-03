@@ -21,10 +21,33 @@
         "testshare": 0.2,
         "split_count": 1,
         "log_weights": "False",
-        "heuristics": ["EdgeCount", "EdgeCountPerClassize", "SegmentCount", "LongestIbd", "IbdSum", "IbdSumPerEdge"],
-        "community_detection": [],
-        "mlps": [],
-        "gnns": ["TAGConv_3l_512h_w_k3"]
+        "classifiers": 
+        [
+            {
+                "model": "EdgeCount"
+            },
+            {
+                "model": "EdgeCountPerClassize"
+            },
+            {
+                "model": "SegmentCount"
+            },
+            {
+                "model": "LongestIbd"
+            },
+            {
+                "model": "IbdSum"
+            },
+            {
+                "model": "IbdSumPerEdge"
+            },
+            {
+                "model":"TAGConv_3l_512h_w_k3",
+                "title":"TAGCONV",
+                "learning_rate":0.123,
+                "param2":34
+            }
+        ]  
     },
     "datasets":
     {        
