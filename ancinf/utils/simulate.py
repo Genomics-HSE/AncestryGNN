@@ -33,11 +33,13 @@ GINNet_narrow_short, GINNet_wide_short, GINNet_narrow_long, GINNet_wide_long, \
 AttnGCN_narrow_short, AttnGCN_wide_short, AttnGCN_narrow_long,  AttnGCN_wide_long, \
 SAGEConv_3l_128h, SAGEConv_3l_512h, SAGEConv_9l_128h, SAGEConv_9l_512h, TAGConv_3l_512h_w_k3_g_norm_mem_pool
     
-NNs = {
+MLPs = {
     "MLP_3l_128h": MLP_3l_128h,
     "MLP_3l_512h": MLP_3l_512h,
     "MLP_9l_128h": MLP_9l_128h,
-    "MLP_9l_512h": MLP_9l_512h,
+    "MLP_9l_512h": MLP_9l_512h
+}
+GNNs = {
     "TAGConv_3l_128h_w_k3": TAGConv_3l_128h_w_k3,
     "TAGConv_3l_512h_w_k3": TAGConv_3l_512h_w_k3,
     "TAGConv_3l_1024h_w_k3": TAGConv_3l_1024h_w_k3,
@@ -79,10 +81,8 @@ NNs = {
     "SAGEConv_9l_512h": SAGEConv_9l_512h,
     "SAGEConv_9l_512h_gb": SAGEConv_9l_512h,
     "TAGConv_3l_512h_w_k3_g_norm_mem_pool": TAGConv_3l_512h_w_k3_g_norm_mem_pool,
-    "TAGConv_3l_512h_w_k3_g_norm_mem_pool_gb": TAGConv_3l_512h_w_k3_g_norm_mem_pool
-    
+    "TAGConv_3l_512h_w_k3_g_norm_mem_pool_gb": TAGConv_3l_512h_w_k3_g_norm_mem_pool    
 }
-
 
 
 def labeldict_to_labellist(labeldict):
@@ -92,6 +92,7 @@ def labeldict_to_labellist(labeldict):
         idx = labeldict[lbl]
         result[idx] = lbl
     return result
+
 
 def collectdatasetparams(fnamepath, filters={}):
     pairs, weights, labels, labeldict, idxtranslator = load_pure( fnamepath, debug=False, **filters )
@@ -124,8 +125,7 @@ def collectdatasetparams(fnamepath, filters={}):
         "edge_probability": probslist,
         "mean_weight":meanslist
     }
-    return result
-    
+    return result    
 
 
 def collectparams(datadir, workdir, infile):
@@ -163,9 +163,6 @@ def collectandsaveparams(datadir, workdir, infile, outfile):
     with open(outpathfile,"w", encoding="utf-8") as f:
         json.dump(collected, f, indent=4, sort_keys=True)
 
-        
-
-        
 
 def simulateandsaveonedataset(datasetparams, offset, fname, rng):        
     population_sizes = datasetparams["pop_sizes"]        
@@ -177,7 +174,8 @@ def simulateandsaveonedataset(datasetparams, offset, fname, rng):
     #print("Population sizes:", population_sizes)
     counts, means, pop_index = generate_matrices_fn(population_sizes, offset, edge_probs, mean_weight, rng) 
     simulate_graph_fn(classes, means, counts, pop_index, fname)
-        
+
+
 def updateparams(datasetparams, experiment):
     resultparams = {}
     for k in datasetparams:
@@ -211,7 +209,7 @@ def updateparams(datasetparams, experiment):
     resultparams["pop_sizes"] = new_pop_sizes
     
     return resultparams
-        
+
 
 def savepartitions( datasetfname, valshare, testshare, partcount,  partfilename, rng):
     print("partitioning", datasetfname)
@@ -223,9 +221,7 @@ def savepartitions( datasetfname, valshare, testshare, partcount,  partfilename,
     grph = graphdata[0]['graph']
     trns = graphdata[0]['translation']
     #translate indices in ncls to original indices
-    
-    
-    
+
     for itr in range(partcount):        
         permt = getrandompermutation(ncls, rng)
         trainnodeclasses, valnodeclasses, testnodeclasses = dividetrainvaltest(ncls, valshare, testshare, permt)        
@@ -248,8 +244,7 @@ def savepartitions( datasetfname, valshare, testshare, partcount,  partfilename,
     #print(partlist)
     with open(partfilename,"w") as f:
         json.dump({"partitions":partlist}, f, indent=4, sort_keys=True)
-    
-    
+
 
 def simulateandsave(workdir, infile, outfile, rng):
     position = infile.find('.params')
@@ -303,6 +298,7 @@ def simulateandsave(workdir, infile, outfile, rng):
     #create file with all the experiments descritption
     with open(experimentlistfile,"w") as f:
         json.dump(expfiledict, f, indent=4, sort_keys=True)
+
 
 def filterandsaveonedataset(indatafilename, outdatapathfilenamebase, filters, cleanshare, maskshare, rng):
     retval = None
@@ -385,8 +381,8 @@ def filterandsaveonedataset(indatafilename, outdatapathfilenamebase, filters, cl
                     print("ERROR! No node from pair belong to train or clean partitions")
         
     return retval
-    
-        
+
+
 def preprocess(datadir, workdir, infile, outfile, rng):
     position = infile.find('.ancinf')
     if position>0:
@@ -452,29 +448,25 @@ def preprocess(datadir, workdir, infile, outfile, rng):
     #create file with all the experiments descritption
     with open(experimentlistfile,"w", encoding="utf-8") as f:
         json.dump(expfiledict, f, indent=4, sort_keys=True)
-            
 
-    
+
 def getexplistinfo(explist):
     datasetcount = len(explist)
     for dsname in explist:
         ds = explist[dsname]
         expcount = len(ds)
         splitcount = ds[0]["crossvalidation"]["split_count"]
-        mlpcount = len(ds[0]["crossvalidation"]["mlps"])
-        gnncount = len(ds[0]["crossvalidation"]["gnns"])
-        heucount = len(ds[0]["crossvalidation"]["heuristics"])
-        comdetcount = len(ds[0]["crossvalidation"]["community_detection"])
+        classifiercount = len(ds[0]["crossvalidation"]["classifiers"])        
         break
-       
     totalruncount = datasetcount * expcount * splitcount
+    
     print (f"Total runs: {totalruncount} = {datasetcount} datasets x {expcount} parameter values x {splitcount} splits")
-    print (f"Every run: {heucount} heuristics, {comdetcount} community detection algorithms, {mlpcount} fully connected NNs, {gnncount} graph NNs")
+    print (f"Every run: {classifiercount} classifiers")
     
     return totalruncount, expcount
 
 
-def processpartition_nn(expresults, datafile, partition, maskednodes, gnnlist, mlplist, comdetlist, fullist, runidx, runbasename, log_weights, gpuidx):
+def processpartition_nn(expresults, datafile, partition, maskednodes, classifiers, runidx, runbasename, log_weights, gpuidx):
     print(f"{datafile=}")
     print(f"{maskednodes=}")
     print(f"{partition=}")
@@ -493,40 +485,19 @@ def processpartition_nn(expresults, datafile, partition, maskednodes, gnnlist, m
     test_split = np.array(test_list)
     if not(maskednodes is None):
         maskednodes = np.array(maskednodes)
-    
-    #gnn
-    for gnnclass in gnnlist:
-        run_name = runbasename + "_"+gnnclass
-        if type(gnnlist) is dict:
-            model_params = gnnlist[gnnclass]
-        else:
-            model_params = {}
-        print("NEW RUN:", run_name)
-        starttime = time.time()
-        runresult = simplified_genlink_run(datafile, train_split, valid_split, test_split, run_name, gnnclass, gnn=True, logweights=log_weights, gpu=gpuidx, maskednodes=maskednodes, model_params = model_params)
-        runtime = time.time() - starttime
-        runresult["time"] = runtime        
-        print("RUN COMPLETE!", gnnclass, runresult)        
-        expresults[gnnclass].append(runresult)
-
-    #mlp
-    for mlpclass in mlplist:
-        run_name = runbasename +"_"+mlpclass
-        if type(gnnlist) is dict:
-            model_params = gnnlist[gnnclass]
-        else:
-            model_params = {}
-        print("NEW RUN:", run_name)
-        starttime = time.time()
-        runresult = simplified_genlink_run(datafile, train_split, valid_split, test_split, run_name, mlpclass, gnn=False, logweights=log_weights, gpu=gpuidx, maskednodes=maskednodes, model_params = model_params )
-        runtime = time.time() - starttime
-        runresult["time"] = runtime        
-        print("RUN COMPLETE!", mlpclass, runresult)
-        expresults[mlpclass].append(runresult)
-
-    #community detection
-    if comdetlist!=[]:        
-        for comdet in comdetlist:
+        
+    for classifier in classifiers:        
+        if classifier["_type"] in ['mlp', 'gnn']:
+            run_name = runbasename + "_"+classifier["_title"]            
+            print("NEW RUN:", run_name)        
+            starttime = time.time()        
+            runresult = simplified_genlink_run(datafile, train_split, valid_split, test_split, run_name, classifier, logweights=log_weights, gpu=gpuidx, maskednodes=maskednodes)
+            runtime = time.time() - starttime
+            runresult["time"] = runtime        
+            print("RUN COMPLETE!", classifier["_title"], runresult)
+            expresults[classifier["_title"]].append(runresult)
+        elif classifier["_type"] == 'comdet':
+            #community detection    
             starttime = time.time()
             if comdet == "Spectral":
                 dp = DataProcessor(datafile)
@@ -563,17 +534,15 @@ def processpartition_nn(expresults, datafile, partition, maskednodes, gnnlist, m
                 dp = DataProcessor(datafile)
                 dp.load_train_valid_test_nodes(train_split, valid_split, test_split, 'numpy') 
                 bm = BaselineMethods(dp)
-                score = bm.ridge_regression(0.5, 3)        
+                score = bm.ridge_regression(0.5, 3)
                 
-                    
             runtime = time.time() - starttime
             print(comdet,":", score)
             runresult = score
             runresult["time"] = runtime            
-            expresults[comdet].append(runresult)
+            expresults[classifier["_title"]].append(runresult)
 
-            
-            
+
 def inference(workdir, traindf, inferdf, model, model_weights, gpu=0):
     #1. get ids of every unknown node         
     inferredlabels = []
@@ -628,21 +597,31 @@ def getfeaturetype(nnclass, masked_nodes):
 
     return features + postfix
 
-def runcleantest(cleanexpresults, cleannodes, cleannodelabels, cleantestdataframes, gnnlist, run_base_name, gpu, masked_nodes):
-    for nnclass in gnnlist:
-        run_name = os.path.join(run_base_name + "_"+nnclass, "model_best.bin" )
-        inferredlabels = []
-        for node in cleannodes:
-            print("infering class for node", node)
-            print(cleantestdataframes[node])
-            #cleantestdataframes[node].to_csv("temp.csv")
-            #TODO fix test_type depending on the network
-            feature_type = getfeaturetype(nnclass, masked_nodes)
-            testresult = independent_test(run_name, NNs[nnclass], cleantestdataframes[node], node, gpu, feature_type, masked_nodes )
-            print("clean test classification", testresult)
-            inferredlabels.append( testresult )
-        runresult = f1_score(cleannodelabels, inferredlabels, average='macro')
-        cleanexpresults[nnclass].append(runresult)
+
+def runcleantest(cleanexpresults, cleannodes, cleannodelabels, cleantestdataframes, classifiers, run_base_name, gpu, masked_nodes):
+    for classifier in classifiers:
+        if classifier['_type'] in ['mlp', 'gnn']:
+            nnclass = classifier['model']
+            nntitle = classifier['_title']
+            run_name = os.path.join(run_base_name + "_"+nntitle, "model_best.bin" )
+            inferredlabels = []
+            for node in cleannodes:
+                print("infering class for node", node)
+                print(cleantestdataframes[node])
+                #cleantestdataframes[node].to_csv("temp.csv")
+                #TODO fix test_type depending on the network
+                feature_type = getfeaturetype(nnclass, masked_nodes)
+                print(f"{feature_type=}")
+                if classifier['_type'] == 'mlp':
+                    mdl = MLPs[nnclass]
+                else:
+                    mdl = GNNs[nnclass]
+                testresult = independent_test(run_name, mdl, cleantestdataframes[node], node, gpu, feature_type, masked_nodes )
+                print("clean test classification", testresult)
+                inferredlabels.append( testresult )
+            runresult = f1_score(cleannodelabels, inferredlabels, average='macro')
+            cleanexpresults[nntitle].append(runresult)
+
 
 def getbrief(fullres):
     briefres = {}
@@ -665,14 +644,19 @@ def getbrief(fullres):
             briefres[dataset].append(expres)
         
     return briefres
-        
-def compiledsresults(expresults, fullist):
+
+
+def compiledsresults(expresults, classifiers):
+    # print(f"{expresults=}")
     dsres = {}
     #dsbrief = {}
-    for nnclass in fullist:
+    for classifier in classifiers:
+        nnclass = classifier['_title']
+        #print(nnclass)
         dsres[nnclass] = {}
         #dsbrief[nnclass] = {}
         if expresults[nnclass]!=[]:
+            
             metrics = expresults[nnclass][0]            
             for metric in metrics:
                 if metric == "class_scores":
@@ -705,7 +689,38 @@ def compiledsresults(expresults, fullist):
     return dsres#, dsbrief
 
 
+def getclassifiertype(classifier):
+    tp = "unknown"
+    if classifier["model"] in ["EdgeCount", "EdgeCountPerClassize", "SegmentCount", "LongestIbd", "IbdSum", "IbdSumPerEdge"]:
+        tp = "heur"
+    elif classifier["model"] in ["Spectral", "Agglomerative", "GirvanNewmann", "LabelPropagation", "RelationalNeighbor", "MultiRankWalk", "RidgeRegression"] :
+        tp = "comdet"
+    elif classifier["model"] in MLPs:
+        tp = "mlp"
+    elif classifier["model"] in GNNs:
+        tp = "gnn"        
+    return tp
 
+
+def getclassifiertitle(classifier, usedtitles):
+    title = "undefined"
+    if "title" in classifier:
+        title = classifier["title"]
+    else: 
+        title = classifier["model"]
+        for param in classifier:
+            if (not (param in ["model", "_type", "_title"])) and (not (type(param) is list)) and (not (type(param) is dict)):
+                title = title + '_' + param + '_' + str(classifier[param])
+
+    outtitle = title
+    idx = 1
+    while outtitle in usedtitles:
+        outtitle = title + '_' + str(idx)
+        idx += 1
+        
+    return outtitle
+                
+                
 def runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tosplit, gpu):
     #loop through dataset
     #  loop through experiments (different
@@ -743,8 +758,7 @@ def runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tospl
         datasetexplist = explist[dataset]
         datasetresults = []
         for exp_idx in range(fromexp, toexp):            
-            exp = datasetexplist[exp_idx]
-            
+            exp = datasetexplist[exp_idx]            
             if "maskednodes" in exp:
                 datafile = os.path.join(workdir, exp["maskedfile"])
             else:
@@ -774,29 +788,46 @@ def runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tospl
             
             
             log_weights = exp["crossvalidation"]["log_weights"] 
-            heurlist = exp["crossvalidation"]["heuristics"] 
-            comdetlist = exp["crossvalidation"]["community_detection"]
-            mlplist = exp["crossvalidation"]["mlps"]
-            gnnlist = exp["crossvalidation"]["gnns"]            
-            fullist = []
-            if type(heurlist) is list:
-                fullist = fullist + heurlist
-            else:
-                fullist = fullist + list(heurlist.keys())
-            if type(comdetlist) is list:
-                fullist = fullist + comdetlist
-            else:
-                fullist = fullist + list(comdetlist.keys())
-            if type(mlplist) is list:
-                fullist = fullist + mlplist
-            else:
-                fullist = fullist + list(mlplist.keys())
-            if type(gnnlist) is list:
-                fullist = fullist + gnnlist
-            else:
-                fullist = fullist + list(gnnlist.keys())
             
-            expresults = {nnclass:[] for nnclass in fullist} 
+            #create full list and set type ("mlp", "gnn", "heur", "comdet")
+            classifiers = exp["crossvalidation"]["classifiers"] 
+            
+            usedtitles = []
+            for classifier in classifiers:
+                classifier["_type"] = getclassifiertype(classifier)
+                classifier["_title"] = getclassifiertitle(classifier, usedtitles)
+                usedtitles.append(classifier["_title"])
+            
+            
+            heurlist = [classifier["model"] for classifier in classifiers if classifier["_type"] == "heur"]
+            
+#             heurlist = exp["crossvalidation"]["heuristics"] 
+#             comdetlist = exp["crossvalidation"]["community_detection"]            
+#             mlplist = exp["crossvalidation"]["mlps"]
+#             gnnlist = exp["crossvalidation"]["gnns"]
+#             mlpmodellist = []
+            
+#             mlptitlelist = 
+#             gnnmodellist = 
+#             gnntitlelist = 
+            
+#             fullist = [] #title list
+#             if type(heurlist) is list:
+#                 fullist = fullist + heurlist
+#             else:
+#                 fullist = fullist + list(heurlist.keys())
+#             if type(comdetlist) is list:
+#                 fullist = fullist + comdetlist
+#             else:
+#                 fullist = fullist + list(comdetlist.keys())
+            
+#             for nnc in gnnlist:
+#                 if type(nnc) is dict:
+#                     fullist.append(nnc["model"])
+#                 else:
+#                     fullist.append(nnc)            
+            expresults = {classifier["_title"]:[] for classifier in classifiers} 
+            
             datasetresults.append(expresults) #({nnclass: {"mean": -1, "std": -1, "values":[]} for nnclass in fullist})
             
             datasetstart = datetime.datetime.now().strftime("%H:%M on %d %B %Y")
@@ -818,19 +849,7 @@ def runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tospl
                 for heurclass in heurlist:
                     expresults[heurclass] = heuresult[heurclass] 
                     for expr in expresults[heurclass]:
-                        expr["time"] = runtime/len(heuresult[heurclass])
-                    # expresults[heurclass] = []                    
-                    # for eidx in range(len(heuresult[heurclass]["f1_macro"]["values"]))
-                    #     exprest = {"time": runtime/len(heuresult[heurclass]["f1_macro"]["values"])}
-                    #     for metric in heuresult[heurclass]:
-                    #         if metric != "class_scores":
-                    #             exprest[metric] = heuresult[heurclass][metric]["values"][eidx]
-                    #         else:
-                    #             exprest["class_scores"] = {}
-                    #             for cl in heuresult[heurclass]["class_scores"]:
-                    #                 exprest["class_scores"][cl] = heuresult[heurclass]["class_scores"][cl]["values"][eidx]
-                    #     expresults[heurclass].append(exprest)
-                        
+                        expr["time"] = runtime/len(heuresult[heurclass])                        
             
             #2. GNNs and MLPs partition by partition
             #if clean test is requiered we prepare dataframes with just one unlabelled node
@@ -846,10 +865,9 @@ def runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tospl
                 for node in cleannodes:
                     fltr1 = dfclean[dfclean["node_id1"] =="node_" +str(node)]                    
                     fltr2 = dfclean[dfclean["node_id2"] =="node_" +str(node)]                                        
-                    onenodedf = pd.concat([dfmain, fltr1, fltr2])                    
+                    onenodedf = pd.concat([dfmain, fltr1, fltr2])
                     cleantestdataframes[node] = onenodedf.reset_index(drop=True)
-                cleanexpresults = {nnclass:[] for nnclass in gnnlist} 
-             
+                cleanexpresults = {classifier["_title"]:[] for classifier in classifiers if classifier["_type"] in ["mlp", "gnn" ]}
             if "maskednodes" in exp:
                 maskednodes = exp["maskednodes"]
             else:
@@ -860,8 +878,10 @@ def runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tospl
                 partition = partitions["partitions"][part_idx]
                 print(f"=========== Run {runidx} of {totalruncount} ======================")
                 run_base_name = os.path.join(workdir, runfolder, "run_"+dataset+"_exp"+str(exp_idx)+"_split"+str(part_idx))
-                processpartition_nn(expresults, datafile, partition, maskednodes, gnnlist, mlplist, comdetlist, fullist, runidx, run_base_name, log_weights, gpu )
-                fullres = compiledsresults(expresults, fullist)                
+                
+                processpartition_nn(expresults, datafile, partition, maskednodes, classifiers, runidx, run_base_name, log_weights, gpu )
+                
+                fullres = compiledsresults(expresults, classifiers)                
                 datasetfinish = datetime.datetime.now().strftime("%H:%M on %d %B %Y")
                 datasetfinishtime = time.time()
                 datasetresults[-1] = {"dataset_begin": datasetstart, "dataset_end": datasetfinish, 
@@ -876,9 +896,10 @@ def runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tospl
                 
                 runidx+=1
                 #now clean test if requested
-                if ("cleanfile" in exp) and (gnnlist != []):
-                    print("Running clean inference test")                
-                    runcleantest(cleanexpresults, cleannodes, cleannodelabels, cleantestdataframes, gnnlist, run_base_name, gpu, maskednodes)  
+                if ("cleanfile" in exp):
+                    print("Running clean inference test")  
+                    print(f"{cleanexpresults=}")
+                    runcleantest(cleanexpresults, cleannodes, cleannodelabels, cleantestdataframes, classifiers, run_base_name, gpu, maskednodes)  
                     for nnclass in cleanexpresults:
                         datasetresults[-1]["classifiers"][nnclass]["f1_macro"].update({"clean_mean": np.average(cleanexpresults[nnclass]), 
                                              "clean_std": np.std(cleanexpresults[nnclass]), 
@@ -888,31 +909,32 @@ def runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tospl
                         json.dump({"brief": getbrief(result), "details":result}, f, indent=4, sort_keys=True)
             #end partition loop
     shutil.move(os.path.join(workdir, outfile+'.incomplete'), os.path.join(workdir, outfile))
-    return os.path.join(workdir, outfile)       
-            
-            
-def simplified_genlink_run(dataframe_path, train_split, valid_split, test_split, rundir, nnclass, gnn=True, logweights=False, gpu=0, maskednodes=None, model_params={}):
+    return os.path.join(workdir, outfile)
+
+
+def simplified_genlink_run(dataframe_path, train_split, valid_split, test_split, rundir, classifier, logweights=False, gpu=0, maskednodes=None):
     '''
         returns f1 macro for one experiment
     '''
     dp = DataProcessor(dataframe_path)
     dp.load_train_valid_test_nodes(train_split, valid_split, test_split, 'numpy', mask_path = maskednodes)
     masking = not (maskednodes is None)
-    if gnn:        
-        if nnclass[-3:] == '_gb': 
+    if classifier['_type'] == 'gnn':
+        if classifier['model'][-3:] == '_gb': 
             features = 'graph_based'
             train_dataset_type = "one"
         else:
             features = 'one_hot'
             train_dataset_type = 'multiple'
         dp.make_train_valid_test_datasets_with_numba(features, 'homogeneous', train_dataset_type, 'multiple', rundir, log_edge_weights=logweights, masking = masking)    
-        trainer = Trainer(dp, NNs[nnclass], 0.0001, 5e-5, torch.nn.CrossEntropyLoss, 10, rundir, 2, 20,
-                      features, 50, 10, cuda_device_specified=gpu, masking = masking, model_params = model_params)
-    else:#mlp        
+        trainer = Trainer(dp, GNNs[classifier['model']], 0.0001, 5e-5, torch.nn.CrossEntropyLoss, 10, rundir, 2, 20,
+                      features, 50, 10, cuda_device_specified=gpu, masking = masking, model_params = classifier)
+    elif classifier['_type'] == 'gnn': 
+        # mlp
         dp.make_train_valid_test_datasets_with_numba('graph_based', 'homogeneous', 'one', 'multiple', rundir, log_edge_weights=logweights, masking=masking)    
-        trainer = Trainer(dp, NNs[nnclass], 0.0001, 5e-5, torch.nn.CrossEntropyLoss, 10, rundir, 2, 50,
-                      'graph_based', 50, 10, cuda_device_specified=gpu, masking = masking, model_params = model_params)
-    
+        trainer = Trainer(dp, MLPs[classifier['model']], 0.0001, 5e-5, torch.nn.CrossEntropyLoss, 10, rundir, 2, 50,
+                      'graph_based', 50, 10, cuda_device_specified=gpu, masking = masking, model_params = classifier)
+
     return trainer.run()           
 
 
@@ -957,6 +979,7 @@ def getplotdata(explistfile, resultfile, parameter):
         plotdata[dataset] = datasetdata
     return plotdata    
 
+
 def plotclassifierdependency(plotdata, classifierlist):
     '''
          Plot selected classifier quality dependence on parameter
@@ -977,13 +1000,11 @@ def plotclassifierdependency(plotdata, classifierlist):
     for dataset in plotdata:
         for classifier in classifierlist:
             plt.plot(plotdata[dataset]['x'], plotdata[dataset][classifier], label=classifier)
-    
+
         plt.title(dataset+": "+plotdata[dataset]["param"])
         plt.legend()
         plt.show()
 
 
-            
-        
 if __name__=="__main__":
     print("just a test")

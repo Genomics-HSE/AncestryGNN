@@ -14,8 +14,7 @@
         "offset": 8.0    
     },
     "crossvalidation":
-    {   
-        "cleanshare": 0.2,
+    {        
         "maskshare": 0.75,
         "valshare": 0.2,
         "testshare": 0.2,
@@ -40,14 +39,20 @@
             },
             {
                 "model": "IbdSumPerEdge"
-            },
+            },            
             {
                 "model":"TAGConv_3l_512h_w_k3",
                 "title":"TAGCONV",
                 "learning_rate":0.123,
                 "param2":34
+            },
+            {
+                "model":"TAGConv_3l_512h_w_k3_gb",
+                "title":"TAGCONV",
+                "learning_rate":0.123,
+                "param2":34
             }
-        ]  
+        ]    
     },
     "datasets":
     {        

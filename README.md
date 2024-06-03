@@ -144,6 +144,7 @@ Usage: python -m ancinf infer [OPTIONS] WORKDIR TRAINDF INFERDF MODEL WEIGHTS
 # IV. Utilities
 ## Combine .result files from a folder
 
+Input: 
 
 # Project file format
 
