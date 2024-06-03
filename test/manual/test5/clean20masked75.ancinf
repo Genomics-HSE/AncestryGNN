@@ -24,7 +24,7 @@
         "heuristics": ["EdgeCount", "EdgeCountPerClassize", "SegmentCount", "LongestIbd", "IbdSum", "IbdSumPerEdge"],
         "community_detection": [],
         "mlps": [],
-        "gnns": ["TAGConv_3l_512h_w_k3_gb"]
+        "gnns": ["TAGConv_3l_512h_w_k3"]
     },
     "datasets":
     {        
