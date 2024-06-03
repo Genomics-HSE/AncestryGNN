@@ -1234,7 +1234,8 @@ def independent_test(model_path, model_cls, df, vertex_id, gpu_id, test_type, ma
         test_split = np.array(list(filter(lambda node: node not in mask_data, test_split)))
     
     dp.load_train_valid_test_nodes(train_split, valid_split, test_split, 'numpy', mask_path=mask_nodes)
-    if test_type == 'one_hot':
+    
+    if test_type == 'one_hot':        
         dp.make_train_valid_test_datasets_with_numba('one_hot', 'homogeneous', 'multiple', 'multiple', 'debug_debug', skip_train_val=True)
     elif test_type == 'graph_based':
         dp.make_train_valid_test_datasets_with_numba('graph_based', 'homogeneous', 'one', 'multiple', 'debug_debug', skip_train_val=True)

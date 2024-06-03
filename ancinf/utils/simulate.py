@@ -638,6 +638,7 @@ def runcleantest(cleanexpresults, cleannodes, cleannodelabels, cleantestdatafram
             #cleantestdataframes[node].to_csv("temp.csv")
             #TODO fix test_type depending on the network
             feature_type = getfeaturetype(nnclass, masked_nodes)
+            print(f"{feature_type=}")
             testresult = independent_test(run_name, NNs[nnclass], cleantestdataframes[node], node, gpu, feature_type, masked_nodes )
             print("clean test classification", testresult)
             inferredlabels.append( testresult )
