@@ -640,14 +640,16 @@ def getbrief(fullres):
 
 
 def compiledsresults(expresults, classifiers):
+    # print(f"{expresults=}")
     dsres = {}
     #dsbrief = {}
     for classifier in classifiers:
         nnclass = classifier['_title']
-        print(nnclass)
+        #print(nnclass)
         dsres[nnclass] = {}
         #dsbrief[nnclass] = {}
         if expresults[nnclass]!=[]:
+            
             metrics = expresults[nnclass][0]            
             for metric in metrics:
                 if metric == "class_scores":
@@ -789,7 +791,8 @@ def runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tospl
                 classifier["_title"] = getclassifiertitle(classifier, usedtitles)
                 usedtitles.append(classifier["_title"])
             
-            heurlist = [classifier["model"] for classifer in classifiers if classifier["_type"] == "heur"]
+            
+            heurlist = [classifier["model"] for classifier in classifiers if classifier["_type"] == "heur"]
             
 #             heurlist = exp["crossvalidation"]["heuristics"] 
 #             comdetlist = exp["crossvalidation"]["community_detection"]            
@@ -817,7 +820,7 @@ def runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tospl
 #                 else:
 #                     fullist.append(nnc)            
             expresults = {classifier["_title"]:[] for classifier in classifiers} 
-            print(f"{expresults=}")
+            
             datasetresults.append(expresults) #({nnclass: {"mean": -1, "std": -1, "values":[]} for nnclass in fullist})
             
             datasetstart = datetime.datetime.now().strftime("%H:%M on %d %B %Y")
@@ -868,7 +871,9 @@ def runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tospl
                 partition = partitions["partitions"][part_idx]
                 print(f"=========== Run {runidx} of {totalruncount} ======================")
                 run_base_name = os.path.join(workdir, runfolder, "run_"+dataset+"_exp"+str(exp_idx)+"_split"+str(part_idx))
+                
                 processpartition_nn(expresults, datafile, partition, maskednodes, classifiers, runidx, run_base_name, log_weights, gpu )
+                
                 fullres = compiledsresults(expresults, classifiers)                
                 datasetfinish = datetime.datetime.now().strftime("%H:%M on %d %B %Y")
                 datasetfinishtime = time.time()
