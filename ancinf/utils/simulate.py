@@ -598,22 +598,29 @@ def getfeaturetype(nnclass, masked_nodes):
     return features + postfix
 
 
-def runcleantest(cleanexpresults, cleannodes, cleannodelabels, cleantestdataframes, gnnlist, run_base_name, gpu, masked_nodes):
-    for nnclass in gnnlist:
-        run_name = os.path.join(run_base_name + "_"+nnclass, "model_best.bin" )
-        inferredlabels = []
-        for node in cleannodes:
-            print("infering class for node", node)
-            print(cleantestdataframes[node])
-            #cleantestdataframes[node].to_csv("temp.csv")
-            #TODO fix test_type depending on the network
-            feature_type = getfeaturetype(nnclass, masked_nodes)
-            print(f"{feature_type=}")
-            testresult = independent_test(run_name, NNs[nnclass], cleantestdataframes[node], node, gpu, feature_type, masked_nodes )
-            print("clean test classification", testresult)
-            inferredlabels.append( testresult )
-        runresult = f1_score(cleannodelabels, inferredlabels, average='macro')
-        cleanexpresults[nnclass].append(runresult)
+def runcleantest(cleanexpresults, cleannodes, cleannodelabels, cleantestdataframes, classifiers, run_base_name, gpu, masked_nodes):
+    for classifier in classifiers:
+        if classifier['_type'] in ['mlp', 'gnn']:
+            nnclass = classifier['model']
+            nntitle = classifier['_title']
+            run_name = os.path.join(run_base_name + "_"+nntitle, "model_best.bin" )
+            inferredlabels = []
+            for node in cleannodes:
+                print("infering class for node", node)
+                print(cleantestdataframes[node])
+                #cleantestdataframes[node].to_csv("temp.csv")
+                #TODO fix test_type depending on the network
+                feature_type = getfeaturetype(nnclass, masked_nodes)
+                print(f"{feature_type=}")
+                if classifier['_type'] == 'mlp':
+                    mdl = MLPs[nnclass]
+                else:
+                    mdl = GNNs[nnclass]
+                testresult = independent_test(run_name, mdl, cleantestdataframes[node], node, gpu, feature_type, masked_nodes )
+                print("clean test classification", testresult)
+                inferredlabels.append( testresult )
+            runresult = f1_score(cleannodelabels, inferredlabels, average='macro')
+            cleanexpresults[nntitle].append(runresult)
 
 
 def getbrief(fullres):
@@ -860,7 +867,7 @@ def runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tospl
                     fltr2 = dfclean[dfclean["node_id2"] =="node_" +str(node)]                                        
                     onenodedf = pd.concat([dfmain, fltr1, fltr2])
                     cleantestdataframes[node] = onenodedf.reset_index(drop=True)
-                cleanexpresults = {classifier["_title"] for classifer in classifiers if classifier["_type"] in ["mlp", "gnn" ]}
+                cleanexpresults = {classifier["_title"]:[] for classifier in classifiers if classifier["_type"] in ["mlp", "gnn" ]}
             if "maskednodes" in exp:
                 maskednodes = exp["maskednodes"]
             else:
@@ -889,9 +896,10 @@ def runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tospl
                 
                 runidx+=1
                 #now clean test if requested
-                if ("cleanfile" in exp) and (gnnlist != []):
-                    print("Running clean inference test")                
-                    runcleantest(cleanexpresults, cleannodes, cleannodelabels, cleantestdataframes, gnnlist, run_base_name, gpu, maskednodes)  
+                if ("cleanfile" in exp):
+                    print("Running clean inference test")  
+                    print(f"{cleanexpresults=}")
+                    runcleantest(cleanexpresults, cleannodes, cleannodelabels, cleantestdataframes, classifiers, run_base_name, gpu, maskednodes)  
                     for nnclass in cleanexpresults:
                         datasetresults[-1]["classifiers"][nnclass]["f1_macro"].update({"clean_mean": np.average(cleanexpresults[nnclass]), 
                                              "clean_std": np.std(cleanexpresults[nnclass]), 
