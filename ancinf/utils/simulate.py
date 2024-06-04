@@ -544,39 +544,63 @@ def processpartition_nn(expresults, datafile, partition, maskednodes, classifier
             expresults[classifier["_title"]].append(runresult)
 
 
-def inference(workdir, traindf, inferdf, model, model_weights, gpu=0):
-    #1. get ids of every unknown node         
-    inferredlabels = []
+def inference(workdir, infile, inferdf, gpu=0):
+    # 1. get classifiers and their weigth files
+    with open(os.path.join(workdir, infile, "r")) as f:
+        explistfile = json.load(f)
+    # assume only one dataset in explistfile, does not make sense otherwise
+    for dataset in explistfile:
+        experiments = explistfile[dataset]
+        break
     
-    dfmain = pd.read_csv(traindf)
-    dfclean = pd.read_csv(inferdf)    
-    
-    masked_nodes = None
-    # get masked nodes 
-    pairs, weights, labels, labeldict, idxtranslator = load_pure( traindf, debug=False)
-    if "masked" in labeldict:
-        unklblidx = labeldict["masked"]
-        masked_nodes = idxtranslator[labels == unklblidx]
-    
-    feature_type = getfeaturetype(model, masked_nodes)
-    
+    results = {}
+    dfclean = pd.read_csv(inferdf)
     pairs, weights, labels, labeldict, idxtranslator = load_pure( inferdf, debug=False)
     unklblidx = labeldict["unknown"]
     cleannodes = list( idxtranslator[ labels == unklblidx ] )
     print("unknown nodes:", cleannodes)
-    print("weights path:", model_weights)    
-    for node in cleannodes:
-        print("infering class for node", node)
-        fltr1 = dfclean[dfclean["node_id1"] =="node_" +str(node)]                    
-        fltr2 = dfclean[dfclean["node_id2"] =="node_" +str(node)]                                        
-        onenodedf = pd.concat([dfmain, fltr1, fltr2])                    
-        df = onenodedf.reset_index(drop=True)                         
-        #TODO fix test_type depending on the network
-        testresult = independent_test(model_weights, GNNs[model], df, node, gpu, feature_type, masked_nodes )
-        print("inference results", testresult)
-        inferredlabels.append( testresult )
+
+    position = infile.find('.explist')
+    runfolder = infile[:position] + "_runs"
     
-    return cleannodes, inferredlabels
+    results = {}
+    for node in cleannodes:
+        results[node] = {}
+        
+    for exp_idx, experiment in enumerate(experiments):
+        splitcount = experiment["crossvalidation"]["split_count"]
+        classifiers = experiment["crossvalidation"]["classifiers"]
+        traindf = experiment["crossvalidation"]["datafile"]
+        addclassifierinfo(classifiers)
+        dfmain = pd.read_csv(traindf)
+        masked_nodes = None
+        # get masked nodes 
+        pairs, weights, labels, labeldict, idxtranslator = load_pure(traindf, debug=False)
+        if "masked" in labeldict:
+            unklblidx = labeldict["masked"]
+            masked_nodes = idxtranslator[labels == unklblidx]
+
+        for node in cleannodes:
+            print("infering class for node", node)
+            fltr1 = dfclean[dfclean["node_id1"] =="node_" +str(node)]                    
+            fltr2 = dfclean[dfclean["node_id2"] =="node_" +str(node)]                                        
+            onenodedf = pd.concat([dfmain, fltr1, fltr2])                    
+            df = onenodedf.reset_index(drop=True)                         
+
+            for part_idx in range(splitcount):
+                run_base_name = os.path.join(workdir, runfolder, "run_"+dataset+"_exp"+str(exp_idx)+"_split"+str(part_idx))
+                for classifier in classifiers:
+                    if classifier["_type"] in ["mlp", "gnn"]:
+                        model_weights = run_base_name + '_' + classifier["_title"]
+                        print("weights path:", model_weights)    
+                        model = classifier["model"]
+                        feature_type = getfeaturetype(model, masked_nodes)
+                        testresult = independent_test(model_weights, GNNs[model], df, node, gpu, feature_type, masked_nodes )
+                        print("inference results", testresult)                        
+                        weikey = "run_"+dataset+"_exp"+str(exp_idx)+"_split"+str(part_idx) + '_' + classifier["_title"]
+                        results[node][weikey] = testresult
+
+    return results
 
 
 def getfeaturetype(nnclass, masked_nodes):
@@ -589,7 +613,7 @@ def getfeaturetype(nnclass, masked_nodes):
         features = 'graph_based'
     else:
         # gnn
-        if nnclass[-3:] == '_gb': 
+        if nnclass[-3:] == '_gb':
             features = 'graph_based'
             train_dataset_type = "one"
         else:
@@ -721,13 +745,20 @@ def getclassifiertitle(classifier, usedtitles):
         
     return outtitle
 
-                
+def addclassifierinfo(classifiers):
+    usedtitles = []
+    for classifier in classifiers:
+        classifier["_type"] = getclassifiertype(classifier)
+        classifier["_title"] = getclassifiertitle(classifier, usedtitles)
+        usedtitles.append(classifier["_title"])
+
+
 def runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tosplit, gpu):
     #loop through dataset
     #  loop through experiments (different
     #    loop though splits
     #      loop through classifiers
-    #        train test update results resave with new data    
+    #        train test update results resave with new data
     with open(os.path.join(workdir, infile),"r") as f:
         explist = json.load(f)    
     totalruncount, expcount = getexplistinfo(explist)
@@ -793,40 +824,9 @@ def runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tospl
             #create full list and set type ("mlp", "gnn", "heur", "comdet")
             classifiers = exp["crossvalidation"]["classifiers"] 
             
-            usedtitles = []
-            for classifier in classifiers:
-                classifier["_type"] = getclassifiertype(classifier)
-                classifier["_title"] = getclassifiertitle(classifier, usedtitles)
-                usedtitles.append(classifier["_title"])
-            
-            
+            addclassifierinfo(classifiers)            
+
             heurlist = [classifier["model"] for classifier in classifiers if classifier["_type"] == "heur"]
-            
-#             heurlist = exp["crossvalidation"]["heuristics"] 
-#             comdetlist = exp["crossvalidation"]["community_detection"]            
-#             mlplist = exp["crossvalidation"]["mlps"]
-#             gnnlist = exp["crossvalidation"]["gnns"]
-#             mlpmodellist = []
-            
-#             mlptitlelist = 
-#             gnnmodellist = 
-#             gnntitlelist = 
-            
-#             fullist = [] #title list
-#             if type(heurlist) is list:
-#                 fullist = fullist + heurlist
-#             else:
-#                 fullist = fullist + list(heurlist.keys())
-#             if type(comdetlist) is list:
-#                 fullist = fullist + comdetlist
-#             else:
-#                 fullist = fullist + list(comdetlist.keys())
-            
-#             for nnc in gnnlist:
-#                 if type(nnc) is dict:
-#                     fullist.append(nnc["model"])
-#                 else:
-#                     fullist.append(nnc)            
             expresults = {classifier["_title"]:[] for classifier in classifiers} 
             
             datasetresults.append(expresults) #({nnclass: {"mean": -1, "std": -1, "values":[]} for nnclass in fullist})

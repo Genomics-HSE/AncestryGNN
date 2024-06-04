@@ -221,23 +221,19 @@ def crossval(workdir, infile, outfile, seed, processes, fromexp, toexp, fromspli
 # STAGE 4 INFERENCE
 @cli.command()
 @click.argument("workdir")
-@click.argument("traindf")
+@click.argument("infile")
 @click.argument("inferdf")
-@click.argument("model")
-@click.argument("weights")
-def infer(workdir, traindf, inferdf, model, weights):
+def infer(workdir, infile, inferdf):
     """
-    traindf: Dataset on which the model was trained
-
-    inferdf, Dataset with nodes with classes to be inferred (labelled 'unknown')
-
-    model: Model name
-
-    weights: Weights file
+    Classify unknow nodes from INFERDF using all models listed in INFILE
+    for which crossvalidation was already performed.
+    
+    WORKDIR: folder with .explist file and run results 
+    INFILE:  .explist file with a list of models for inference    
+    INFERDF: Dataset with nodes with classes to be inferred (labelled 'unknown')    
     """
-    nodes, labels = sim.inference(workdir, traindf, inferdf, model, weights)
-    outfilename = inferdf+".inferred"
-    result = {"node_"+str(node): lbl for node, lbl in zip(nodes, labels)}
+    result = sim.inference(workdir, infile, inferdf)
+    outfilename = inferdf+".inferred"   
 
     with open(os.path.join(workdir, outfilename), "w", encoding="utf-8") as f:
         json.dump(result, f, indent=4, sort_keys=True)

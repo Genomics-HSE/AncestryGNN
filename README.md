@@ -128,14 +128,13 @@ Options:
 Input: datasets for train and inference, model weights
 
 Output: inference results
-
 ```
-Usage: python -m ancinf infer [OPTIONS] WORKDIR TRAINDF INFERDF MODEL WEIGHTS
+Usage: python -m ancinf infer [OPTIONS] WORKDIR INFILE TRAINDF INFERDF 
 
+  workdir: folder with .ancinf file and rundirs
+  infile:  .ancinf file 
   traindf: Dataset on which the model was trained
-  inferdf, Dataset with nodes with classes to be inferred (labelled 'unknown')
-  model: Model name
-  weights: Weights file
+  inferdf: Dataset with nodes with classes to be inferred (labelled 'unknown')  
 ```
 
 # IV. Utilities
@@ -143,7 +142,6 @@ Usage: python -m ancinf infer [OPTIONS] WORKDIR TRAINDF INFERDF MODEL WEIGHTS
 
 Input: folder with .resuts files from one project (received either from different machines or from failed run)
 Output: combined results with averages/stds across all results
-
 ```
 Usage: python -m ancinf combine [OPTIONS] WORKDIR OUTFILE
 ```
