@@ -948,7 +948,7 @@ class NullSimulator:
 
 
 class Trainer:
-    def __init__(self, data: DataProcessor, model_cls, lr, wd, loss_fn, batch_size, log_dir, patience, num_epochs, feature_type, train_iterations_per_sample, evaluation_steps, weight=None, cuda_device_specified: int = None, masking=False, disable_printing=True, optimize_memory_transfer=True, model_params=None, seed=42):
+    def __init__(self, data: DataProcessor, model_cls, lr, wd, loss_fn, batch_size, log_dir, patience, num_epochs, feature_type, train_iterations_per_sample, evaluation_steps, weight=None, cuda_device_specified: int = None, masking=False, disable_printing=True, optimize_memory_transfer=True, model_params=None, seed=42, save_model_in_ram=False):
         self.data = data
         self.model = None
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') if cuda_device_specified is None else torch.device(f'cuda:{cuda_device_specified}' if torch.cuda.is_available() else 'cpu')
@@ -973,6 +973,7 @@ class Trainer:
         self.disable_printing = disable_printing
         self.optimize_memory_transfer = optimize_memory_transfer
         self.seed = seed
+        self.save_model_in_ram = save_model_in_ram
         
         if model_params is not None:
             for k, v in model_params.items():
@@ -995,7 +996,7 @@ class Trainer:
                 p = F.softmax(self.model(graphs[i].to(self.device))[-1],
                               dim=0).cpu().detach().numpy()
                 y_pred.append(np.argmax(p))
-                y_true.append(graphs[i].y[-1].cpu().detach())
+                y_true.append(int(graphs[i].y[-1].cpu().detach().numpy()))
                 graphs[i].to('cpu')
         elif self.feature_type == 'graph_based':
             if not mask:
@@ -1098,9 +1099,12 @@ class Trainer:
             sns.heatmap(cm, annot=True, fmt=".2f", ax=ax)
             plt.show()
             
-        self.model = None
-        gc.collect() # Python thing
-        torch.cuda.empty_cache() # PyTorch thing
+        if not self.save_model_in_ram:
+            self.model = None
+            gc.collect() # Python thing
+            torch.cuda.empty_cache() # PyTorch thing
+        else:
+            self.model = self.model.eval().cpu()
 
         return {'f1_macro': f1_macro_score, 'f1_weighted': f1_weighted_score, 'accuracy':acc, 'class_scores': f1_macro_score_per_class, 'skipped_nodes': len(self.data.test_nodes) - len(self.data.array_of_graphs_for_testing)}
         
