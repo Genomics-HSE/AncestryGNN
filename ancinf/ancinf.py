@@ -113,7 +113,7 @@ def recomputemeanstd(exp):
             else:
                 for cl in metricresults:
                     metricresults[cl]["mean"] = np.average(metricresults[cl]["values"])
-                    metricresults[cl]["std"] = np.std(metricresults[cl]["values"])    
+                    metricresults[cl]["std"] = np.std(metricresults[cl]["values"])
 
 
 def combine_splits(partresults):
@@ -125,8 +125,8 @@ def combine_splits(partresults):
                 # existing dataset. list experiments and find new
                 existing_exp_ids = [exp["exp_idx"] for exp in result[dataset]]
                 for exp in partres[dataset]:
-                    if exp["exp_idx"] in existing_exp_ids:                        
-                        copyclassifiers(result[dataset], exp)                        
+                    if exp["exp_idx"] in existing_exp_ids:
+                        copyclassifiers(result[dataset], exp)
                     else:
                         # new experiment
                         result[dataset].append(exp)
@@ -236,21 +236,21 @@ def crossval(workdir, infile, outfile, seed, processes, fromexp, toexp, fromspli
 def infer(workdir, infile, inferdf):
     """
     Classify unknow nodes from INFERDF using all models listed in INFILE
-    for which crossvalidation was already performed. 
-    
-    WORKDIR: folder with .explist file and run results 
-    
-    INFILE:  .explist file with a list of models for inference    
-    
-    INFERDF: dataset with nodes with classes to be inferred (labelled 'unknown')    
+    for which crossvalidation was already performed.
+
+    WORKDIR: folder with .explist file and run results
+
+    INFILE:  .explist file with a list of models for inference
+
+    INFERDF: dataset with nodes with classes to be inferred (labelled 'unknown')
     """
     result = sim.inference(workdir, infile, inferdf)
-    outfilename = inferdf+".inferred"   
+    outfilename = inferdf+".inferred"
 
     with open(os.path.join(workdir, outfilename), "w", encoding="utf-8") as f:
         json.dump(result, f, indent=4, sort_keys=True)
 
-    
+
 # UTILS
 @cli.command()
 @click.argument("workdir")
@@ -268,6 +268,7 @@ def combine(workdir, outfile):
 
     with open(os.path.join(workdir, outfile), "w", encoding="utf-8") as f:
         json.dump(combined_results, f, indent=4, sort_keys=True)
+
 
 def main():
     cli()
