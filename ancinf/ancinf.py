@@ -80,6 +80,17 @@ def simulate(workdir, infile, outfile, seed):
 
 
 # STAGE3 HEURISTICS GNN etc
+def copyclassifiers(res_exp, exp):
+    for classifier in exp["classifiers"]:
+        for metric in exp["classifiers"][classifier]:
+            if metric != "class_scores":
+                newvals = exp["classifiers"][classifier][metric]["values"]
+                res_exp["classifiers"][classifier][metric]["values"].extend(newvals)
+            else:
+                for pop in exp["classifiers"][classifier]["class_scores"]:
+                    newvals = exp["classifiers"][classifier][metric][pop]["values"]
+                    res_exp["classifiers"][classifier][metric][pop]["values"].extend(newvals)
+
 def combine_splits(partresults):
     result = {}
     for partres in partresults:
@@ -97,13 +108,8 @@ def combine_splits(partresults):
                         res_exp["dataset_time"] += exp["dataset_time"]
                         # now list classifiers and add split scores
                         # classifiers should be the same
-                        for classifier in exp["classifiers"]:
-                            for metric in exp["classifiers"][classifier]:
-                                if metric != "class_scores":
-                                    res_exp["classifiers"][classifier][metric]["values"].extend(exp["classifiers"][classifier][metric]["values"])
-                                else:
-                                    for pop in exp["classifiers"][classifier]["class_scores"]:
-                                        res_exp["classifiers"][classifier][metric][pop]["values"].extend(exp["classifiers"][classifier][metric][pop]["values"])
+                        copyclassifiers(res_exp, exp)
+                        
                     else:
                         # new experiment
                         result[dataset].append(exp)
