@@ -81,9 +81,9 @@ def simulate(workdir, infile, outfile, seed):
 
 
 # STAGE3 HEURISTICS GNN etc
-def copyclassifiers(result, exp):
+def copyclassifiers(resds, exp):
     # existing experiment, find it
-    for res_exp in result[dataset]:
+    for res_exp in resds:
         if res_exp["exp_idx"] == exp["exp_idx"]:
             break
     res_exp["dataset_time"] += exp["dataset_time"]
@@ -99,6 +99,7 @@ def copyclassifiers(result, exp):
                     newvals = exp["classifiers"][classifier][metric][pop]["values"]
                     res_exp["classifiers"][classifier][metric][pop]["values"].extend(newvals)
 
+
 def recomputemeanstd(exp):
     for classifier in exp["classifiers"]:
         for metric in exp["classifiers"][classifier]:
@@ -113,7 +114,8 @@ def recomputemeanstd(exp):
                 for cl in metricresults:
                     metricresults[cl]["mean"] = np.average(metricresults[cl]["values"])
                     metricresults[cl]["std"] = np.std(metricresults[cl]["values"])    
-                    
+
+
 def combine_splits(partresults):
     result = {}
     for partres in partresults:
@@ -124,7 +126,7 @@ def combine_splits(partresults):
                 existing_exp_ids = [exp["exp_idx"] for exp in result[dataset]]
                 for exp in partres[dataset]:
                     if exp["exp_idx"] in existing_exp_ids:                        
-                        copyclassifiers(result, exp)                        
+                        copyclassifiers(result[dataset], exp)                        
                     else:
                         # new experiment
                         result[dataset].append(exp)
@@ -141,7 +143,6 @@ def combine_splits(partresults):
     for dataset in result:
         for exp in result[dataset]:
             recomputemeanstd(exp)
-            
 
     return {"brief": sim.getbrief(result), "details": result}
 
