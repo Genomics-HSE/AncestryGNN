@@ -226,11 +226,13 @@ def crossval(workdir, infile, outfile, seed, processes, fromexp, toexp, fromspli
 def infer(workdir, infile, inferdf):
     """
     Classify unknow nodes from INFERDF using all models listed in INFILE
-    for which crossvalidation was already performed.
+    for which crossvalidation was already performed. 
     
     WORKDIR: folder with .explist file and run results 
+    
     INFILE:  .explist file with a list of models for inference    
-    INFERDF: Dataset with nodes with classes to be inferred (labelled 'unknown')    
+    
+    INFERDF: dataset with nodes with classes to be inferred (labelled 'unknown')    
     """
     result = sim.inference(workdir, infile, inferdf)
     outfilename = inferdf+".inferred"   
@@ -244,6 +246,9 @@ def infer(workdir, infile, inferdf):
 @click.argument("workdir")
 @click.argument("outfile")
 def combine(workdir, outfile):
+    '''
+    Combine .results files from a folder
+    '''
     resfiles = sorted(glob.glob(os.path.join(workdir, "*.results")))
     partresults = []
     for partresultfile in resfiles:

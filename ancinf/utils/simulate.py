@@ -546,7 +546,7 @@ def processpartition_nn(expresults, datafile, partition, maskednodes, classifier
 
 def inference(workdir, infile, inferdf, gpu=0):
     # 1. get classifiers and their weigth files
-    with open(os.path.join(workdir, infile, "r")) as f:
+    with open(os.path.join(workdir, infile), "r") as f:
         explistfile = json.load(f)
     # assume only one dataset in explistfile, does not make sense otherwise
     for dataset in explistfile:
@@ -554,10 +554,10 @@ def inference(workdir, infile, inferdf, gpu=0):
         break
     
     results = {}
-    dfclean = pd.read_csv(inferdf)
-    pairs, weights, labels, labeldict, idxtranslator = load_pure( inferdf, debug=False)
+    dfclean = pd.read_csv(os.path.join(workdir, inferdf))
+    pairs, weights, labels, labeldict, idxtranslator = load_pure(os.path.join(workdir, inferdf), debug=False)
     unklblidx = labeldict["unknown"]
-    cleannodes = list( idxtranslator[ labels == unklblidx ] )
+    cleannodes = idxtranslator[labels == unklblidx].tolist()
     print("unknown nodes:", cleannodes)
 
     position = infile.find('.explist')
@@ -570,12 +570,12 @@ def inference(workdir, infile, inferdf, gpu=0):
     for exp_idx, experiment in enumerate(experiments):
         splitcount = experiment["crossvalidation"]["split_count"]
         classifiers = experiment["crossvalidation"]["classifiers"]
-        traindf = experiment["crossvalidation"]["datafile"]
+        traindf = experiment["datafile"]
         addclassifierinfo(classifiers)
-        dfmain = pd.read_csv(traindf)
+        dfmain = pd.read_csv(os.path.join(workdir, traindf))
         masked_nodes = None
         # get masked nodes 
-        pairs, weights, labels, labeldict, idxtranslator = load_pure(traindf, debug=False)
+        pairs, weights, labels, labeldict, idxtranslator = load_pure(os.path.join(workdir, traindf), debug=False)
         if "masked" in labeldict:
             unklblidx = labeldict["masked"]
             masked_nodes = idxtranslator[labels == unklblidx]
@@ -591,11 +591,15 @@ def inference(workdir, infile, inferdf, gpu=0):
                 run_base_name = os.path.join(workdir, runfolder, "run_"+dataset+"_exp"+str(exp_idx)+"_split"+str(part_idx))
                 for classifier in classifiers:
                     if classifier["_type"] in ["mlp", "gnn"]:
-                        model_weights = run_base_name + '_' + classifier["_title"]
+                        model_weights = os.path.join(run_base_name + '_' + classifier["_title"], 'model_best.bin')
                         print("weights path:", model_weights)    
                         model = classifier["model"]
                         feature_type = getfeaturetype(model, masked_nodes)
-                        testresult = independent_test(model_weights, GNNs[model], df, node, gpu, feature_type, masked_nodes )
+                        if classifier["_type"] == "gnn":
+                            modelcls = GNNs[model]
+                        else:
+                            modelcls = MLPs[model]
+                        testresult = independent_test(model_weights, modelcls, df, node, gpu, feature_type, masked_nodes )
                         print("inference results", testresult)                        
                         weikey = "run_"+dataset+"_exp"+str(exp_idx)+"_split"+str(part_idx) + '_' + classifier["_title"]
                         results[node][weikey] = testresult
