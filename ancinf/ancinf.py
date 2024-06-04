@@ -6,7 +6,7 @@ from multiprocessing import Pool
 from .utils import simulate as sim
 import json
 import os
-
+import glob
 
 @click.group()
 def cli():
@@ -242,6 +242,21 @@ def infer(workdir, traindf, inferdf, model, weights):
     with open(os.path.join(workdir, outfilename), "w", encoding="utf-8") as f:
         json.dump(result, f, indent=4, sort_keys=True)
 
+    
+# UTILS
+@cli.command()
+@click.argument("workdir")
+@click.argument("outfile")
+def combine(workdir, outfile):
+    resfiles = sorted(glob.glob(os.path.join(workdir, "*.results")))
+    partresults = []
+    for partresultfile in resfiles:
+        with open(partresultfile, "r") as f:
+            partresults.append(json.load(f)["details"])
+    combined_results = combine_splits(partresults)
+
+    with open(os.path.join(workdir, outfile), "w", encoding="utf-8") as f:
+        json.dump(combined_results, f, indent=4, sort_keys=True)
 
 def main():
     cli()

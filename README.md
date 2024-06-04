@@ -133,18 +133,20 @@ Output: inference results
 Usage: python -m ancinf infer [OPTIONS] WORKDIR TRAINDF INFERDF MODEL WEIGHTS
 
   traindf: Dataset on which the model was trained
-
   inferdf, Dataset with nodes with classes to be inferred (labelled 'unknown')
-
   model: Model name
-
   weights: Weights file
 ```
 
 # IV. Utilities
-## Combine .result files from a folder
+## Combine .results files from a folder
 
-Input: 
+Input: folder with .resuts files from one project (received either from different machines or from failed run)
+Output: combined results with averages/stds across all results
+
+```
+Usage: python -m ancinf combine [OPTIONS] WORKDIR OUTFILE
+```
 
 # Project file format
 
