@@ -8,6 +8,7 @@ import json
 import os
 import glob
 
+
 @click.group()
 def cli():
     pass
@@ -80,7 +81,14 @@ def simulate(workdir, infile, outfile, seed):
 
 
 # STAGE3 HEURISTICS GNN etc
-def copyclassifiers(res_exp, exp):
+def copyclassifiers(result, exp):
+    # existing experiment, find it
+    for res_exp in result[dataset]:
+        if res_exp["exp_idx"] == exp["exp_idx"]:
+            break
+    res_exp["dataset_time"] += exp["dataset_time"]
+    # now list classifiers and add split scores
+    # classifiers should be the same
     for classifier in exp["classifiers"]:
         for metric in exp["classifiers"][classifier]:
             if metric != "class_scores":
@@ -91,6 +99,21 @@ def copyclassifiers(res_exp, exp):
                     newvals = exp["classifiers"][classifier][metric][pop]["values"]
                     res_exp["classifiers"][classifier][metric][pop]["values"].extend(newvals)
 
+def recomputemeanstd(exp):
+    for classifier in exp["classifiers"]:
+        for metric in exp["classifiers"][classifier]:
+            metricresults = exp["classifiers"][classifier][metric]
+            if metric != "class_scores":
+                metricresults["mean"] = np.average(metricresults["values"])
+                metricresults["std"] = np.std(metricresults["values"])
+                if "clean_mean" in metricresults:
+                    metricresults["clean_mean"] = np.average(metricresults["clean_values"])
+                    metricresults["clean_std"] = np.std(metricresults["clean_values"])
+            else:
+                for cl in metricresults:
+                    metricresults[cl]["mean"] = np.average(metricresults[cl]["values"])
+                    metricresults[cl]["std"] = np.std(metricresults[cl]["values"])    
+                    
 def combine_splits(partresults):
     result = {}
     for partres in partresults:
@@ -100,45 +123,25 @@ def combine_splits(partresults):
                 # existing dataset. list experiments and find new
                 existing_exp_ids = [exp["exp_idx"] for exp in result[dataset]]
                 for exp in partres[dataset]:
-                    if exp["exp_idx"] in existing_exp_ids:
-                        # existing experiment, find it
-                        for res_exp in result[dataset]:
-                            if res_exp["exp_idx"] == exp["exp_idx"]:
-                                break
-                        res_exp["dataset_time"] += exp["dataset_time"]
-                        # now list classifiers and add split scores
-                        # classifiers should be the same
-                        copyclassifiers(res_exp, exp)
-                        
+                    if exp["exp_idx"] in existing_exp_ids:                        
+                        copyclassifiers(result, exp)                        
                     else:
                         # new experiment
                         result[dataset].append(exp)
                         result[dataset][-1]["dataset_begin"] = "multiprocessing"
                         result[dataset][-1]["dataset_end"] = "multiprocessing"
-
             else:
                 # new dataset
                 result[dataset] = partres[dataset]
                 for exp in result[dataset]:
                     exp["dataset_begin"] = "multiprocessing"
                     exp["dataset_end"] = "multiprocessing"
-            # print(result[dataset])
+
     # recompute mean and std
     for dataset in result:
         for exp in result[dataset]:
-            for classifier in exp["classifiers"]:
-                for metric in exp["classifiers"][classifier]:
-                    metricresults = exp["classifiers"][classifier][metric]
-                    if metric != "class_scores":
-                        metricresults["mean"] = np.average(metricresults["values"])
-                        metricresults["std"] = np.std(metricresults["values"])
-                        if "clean_mean" in metricresults:
-                            metricresults["clean_mean"] = np.average(metricresults["clean_values"])
-                            metricresults["clean_std"] = np.std(metricresults["clean_values"])
-                    else:
-                        for cl in metricresults:
-                            metricresults[cl]["mean"] = np.average(metricresults[cl]["values"])
-                            metricresults[cl]["std"] = np.std(metricresults[cl]["values"])
+            recomputemeanstd(exp)
+            
 
     return {"brief": sim.getbrief(result), "details": result}
 
