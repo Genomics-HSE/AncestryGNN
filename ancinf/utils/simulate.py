@@ -497,6 +497,7 @@ def processpartition_nn(expresults, datafile, partition, maskednodes, classifier
             print("RUN COMPLETE!", classifier["_title"], runresult)
             expresults[classifier["_title"]].append(runresult)
         elif classifier["_type"] == 'comdet':
+            comdet = classifier["model"]
             #community detection    
             starttime = time.time()
             if comdet == "Spectral":
@@ -571,7 +572,7 @@ def inference(workdir, traindf, inferdf, model, model_weights, gpu=0):
         onenodedf = pd.concat([dfmain, fltr1, fltr2])                    
         df = onenodedf.reset_index(drop=True)                         
         #TODO fix test_type depending on the network
-        testresult = independent_test(model_weights, NNs[model], df, node, gpu, feature_type, masked_nodes )
+        testresult = independent_test(model_weights, GNNs[model], df, node, gpu, feature_type, masked_nodes )
         print("inference results", testresult)
         inferredlabels.append( testresult )
     
@@ -719,7 +720,7 @@ def getclassifiertitle(classifier, usedtitles):
         idx += 1
         
     return outtitle
-                
+
                 
 def runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tosplit, gpu):
     #loop through dataset
