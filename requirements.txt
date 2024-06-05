@@ -1,5 +1,6 @@
 click==8.1.7
 pandas==1.2.4
+seaborn==0.13.1
 numba==0.58.1
 numpy==1.26.3
 scikit-learn==1.4.0
