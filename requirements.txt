@@ -1,3 +1,4 @@
+click==8.1.7
 numba==0.58.1
 numpy==1.26.3
 scikit-learn==1.4.0
