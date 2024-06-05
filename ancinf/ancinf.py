@@ -15,14 +15,7 @@ def cli():
 
 
 # STAGE1 GETPARAMS
-@cli.command()
-@click.argument("datadir")
-@click.argument("workdir")
-@click.option("--infile", default="project.ancinf", help="Project file, defaults to project.ancinf")
-@click.option("--outfile", default=None, help="Output file with simulation parameters, "
-              "defaults to project file with '.params' extension")
-def getparams(datadir, workdir, infile, outfile):
-    """Collect parameters of csv files in the DATADIR listed in project file from WORKDIR"""
+def getparams_fn(datadir, workdir, infile, outfile):
     if outfile is None:
         # try to remove .ancinf from infile
         position = infile.find('.ancinf')
@@ -34,16 +27,19 @@ def getparams(datadir, workdir, infile, outfile):
     print("Finished!")
 
 
-# STAGE1' PREPROCESS
 @cli.command()
 @click.argument("datadir")
 @click.argument("workdir")
 @click.option("--infile", default="project.ancinf", help="Project file, defaults to project.ancinf")
-@click.option("--outfile", default=None, help="Output file with experiment list, defaults to project "
-              "file with '.explist' extension")
-@click.option("--seed", default=2023, help="Random seed")
-def preprocess(datadir, workdir, infile, outfile, seed):
-    """Filter datsets from DATADIR, generate train-val-test splits and experiment list file in WORKDIR"""
+@click.option("--outfile", default=None, help="Output file with simulation parameters, "
+              "defaults to project file with '.params' extension")
+def getparams(datadir, workdir, infile, outfile):
+    """Collect parameters of csv files in the DATADIR listed in project file from WORKDIR"""
+    getparams_fn(datadir, workdir, infile, outfile)
+
+
+# STAGE1' PREPROCESS
+def preprocess_fn(datadir, workdir, infile, outfile, seed):
     if outfile is None:
         # try to remove .ancinf from infile
         position = infile.find('.ancinf')
@@ -57,15 +53,20 @@ def preprocess(datadir, workdir, infile, outfile, seed):
     print(f"Finished! Total {time.time()-start:.2f}s")
 
 
-# STAGE 2 SIMULATE
 @cli.command()
+@click.argument("datadir")
 @click.argument("workdir")
-@click.option("--infile", default="project.params", help="File with simulation parameters, defaults to project.params")
-@click.option("--outfile", default=None, help="Output file with experiment list, defaults to project file "
-              "with '.explist' extension")
+@click.option("--infile", default="project.ancinf", help="Project file, defaults to project.ancinf")
+@click.option("--outfile", default=None, help="Output file with experiment list, defaults to project "
+              "file with '.explist' extension")
 @click.option("--seed", default=2023, help="Random seed")
-def simulate(workdir, infile, outfile, seed):
-    """Generate ibd graphs, corresponding slpits and experiment list file for parameters in INFILE"""
+def preprocess(datadir, workdir, infile, outfile, seed):
+    """Filter datsets from DATADIR, generate train-val-test splits and experiment list file in WORKDIR"""
+    preprocess_fn(datadir, workdir, infile, outfile, seed)
+    
+
+# STAGE 2 SIMULATE
+def simulate_fn(workdir, infile, outfile, seed):
     if outfile is None:
         # try to remove .ancinf from infile
         position = infile.find('.params')
@@ -78,6 +79,17 @@ def simulate(workdir, infile, outfile, seed):
     start = time.time()
     sim.simulateandsave(workdir, infile, outfile, rng)
     print(f"Finished! Total {time.time()-start:.2f}s")
+
+
+@cli.command()
+@click.argument("workdir")
+@click.option("--infile", default="project.params", help="File with simulation parameters, defaults to project.params")
+@click.option("--outfile", default=None, help="Output file with experiment list, defaults to project file "
+              "with '.explist' extension")
+@click.option("--seed", default=2023, help="Random seed")
+def simulate(workdir, infile, outfile, seed):
+    """Generate ibd graphs, corresponding slpits and experiment list file for parameters in INFILE"""
+    simulate_fn(workdir, infile, outfile, seed)
 
 
 # STAGE3 HEURISTICS GNN etc
@@ -153,21 +165,7 @@ def runandsavewrapper(args):
 
 
 # STAGE5 TEST HEURISTICS, COMMUNITY DETECTIONS AND TRAIN&TEST NNs
-@cli.command()
-@click.argument("workdir")
-@click.option("--infile", default="project.explist", help="File with experiment list, defaults to project.explist")
-@click.option("--outfile", default=None, help="File with classification metrics, defaults to project file "
-              "with '.result' extension")
-@click.option("--seed", default=2023, help="Random seed")
-@click.option("--processes", default=1, help="Number of parallel workers")
-@click.option("--fromexp", default=None, help="The first experiment to run")
-@click.option("--toexp", default=None, help="Last experiment (not included)")
-@click.option("--fromsplit", default=None, help="The first split to run")
-@click.option("--tosplit", default=None, help="Last split (not included)")
-@click.option("--gpu", default=0, help="GPU")
-@click.option("--gpucount", default=1, help="GPU count")
-def crossval(workdir, infile, outfile, seed, processes, fromexp, toexp, fromsplit, tosplit, gpu, gpucount):
-    """Run crossvalidation for classifiers including heuristics, community detections, GNNs and MLP networks"""
+def crossval_fn(workdir, infile, outfile, seed, processes, fromexp, toexp, fromsplit, tosplit, gpu, gpucount):
     if outfile is None:
         # try to remove .ancinf from infile
         position = infile.find('.explist')
@@ -228,7 +226,33 @@ def crossval(workdir, infile, outfile, seed, processes, fromexp, toexp, fromspli
     print(f"Finished! Total {time.time()-start:.2f}s.")
 
 
+@cli.command()
+@click.argument("workdir")
+@click.option("--infile", default="project.explist", help="File with experiment list, defaults to project.explist")
+@click.option("--outfile", default=None, help="File with classification metrics, defaults to project file "
+              "with '.result' extension")
+@click.option("--seed", default=2023, help="Random seed")
+@click.option("--processes", default=1, help="Number of parallel workers")
+@click.option("--fromexp", default=None, help="The first experiment to run")
+@click.option("--toexp", default=None, help="Last experiment (not included)")
+@click.option("--fromsplit", default=None, help="The first split to run")
+@click.option("--tosplit", default=None, help="Last split (not included)")
+@click.option("--gpu", default=0, help="GPU")
+@click.option("--gpucount", default=1, help="GPU count")
+def crossval(workdir, infile, outfile, seed, processes, fromexp, toexp, fromsplit, tosplit, gpu, gpucount):
+    """Run crossvalidation for classifiers including heuristics, community detections, GNNs and MLP networks"""
+    crossval_fn(workdir, infile, outfile, seed, processes, fromexp, toexp, fromsplit, tosplit, gpu, gpucount)
+
+
 # STAGE 4 INFERENCE
+def infer_fn(workdir, infile, inferdf):
+    result = sim.inference(workdir, infile, inferdf)
+    outfilename = inferdf+".inferred"
+
+    with open(os.path.join(workdir, outfilename), "w", encoding="utf-8") as f:
+        json.dump(result, f, indent=4, sort_keys=True)
+
+
 @cli.command()
 @click.argument("workdir")
 @click.argument("infile")
@@ -244,21 +268,11 @@ def infer(workdir, infile, inferdf):
 
     INFERDF: dataset with nodes with classes to be inferred (labelled 'unknown')
     """
-    result = sim.inference(workdir, infile, inferdf)
-    outfilename = inferdf+".inferred"
-
-    with open(os.path.join(workdir, outfilename), "w", encoding="utf-8") as f:
-        json.dump(result, f, indent=4, sort_keys=True)
+    infer_fn(workdir, infile, inferdf)
 
 
 # UTILS
-@cli.command()
-@click.argument("workdir")
-@click.argument("outfile")
-def combine(workdir, outfile):
-    '''
-    Combine .results files from a folder
-    '''
+def combine_fn(workdir, outfile):
     resfiles = sorted(glob.glob(os.path.join(workdir, "*.results")))
     partresults = []
     for partresultfile in resfiles:
@@ -269,6 +283,15 @@ def combine(workdir, outfile):
     with open(os.path.join(workdir, outfile), "w", encoding="utf-8") as f:
         json.dump(combined_results, f, indent=4, sort_keys=True)
 
+
+@cli.command()
+@click.argument("workdir")
+@click.argument("outfile")
+def combine(workdir, outfile):
+    '''
+    Combine .results files from a folder
+    '''
+    combine_fn(workdir, outfile)
 
 def main():
     cli()

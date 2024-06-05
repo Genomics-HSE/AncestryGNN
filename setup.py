@@ -8,9 +8,11 @@ setuptools.setup(
     author_email='dglyzin@hse.ru',
     description='',
     zip_safe=False,
-    python_requires='>=3.9',
-    packages=setuptools.find_packages(),
+    python_requires='>=3.10',
+    #packages=setuptools.find_packages(),
+    packages=['ancinf'],
     include_package_data=True,
+    
     #install_requires=list(open('requirements.txt').read().split()),
     #entry_points={
     #    'console_scripts': [
