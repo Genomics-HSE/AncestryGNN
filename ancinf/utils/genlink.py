@@ -34,6 +34,7 @@ from scipy.stats import bernoulli, expon, norm
 from sklearn.model_selection import train_test_split
 from torch_geometric.utils.convert import from_networkx
 from torch_geometric.data import InMemoryDataset, Data
+from torch_geometric.utils import one_hot
 from sklearn.semi_supervised import LabelPropagation, LabelSpreading
 from sklearn.cluster import SpectralClustering, AgglomerativeClustering
 from sklearn.metrics import classification_report, confusion_matrix
@@ -45,7 +46,7 @@ from sklearn.metrics import accuracy_score
 from sklearn.neighbors import KNeighborsClassifier
 from torch.nn import Linear, LayerNorm, BatchNorm1d, Sequential, LeakyReLU, Dropout
 from torch_geometric.nn import GCNConv, GATConv, TransformerConv, NNConv, SGConv, ARMAConv, TAGConv, ChebConv, DNAConv, LabelPropagation, \
-EdgeConv, FiLMConv, FastRGCNConv, SSGConv, SAGEConv, GATv2Conv, BatchNorm, GraphNorm, MemPooling, SAGPooling, GINConv 
+EdgeConv, FiLMConv, FastRGCNConv, SSGConv, SAGEConv, GATv2Conv, BatchNorm, GraphNorm, MemPooling, SAGPooling, GINConv, CorrectAndSmooth
 
 
 def symmetrize(m):
@@ -592,10 +593,10 @@ class DataProcessor:
         if feature_type == 'one_hot':
             if masking:
                 features = self.make_one_hot_encoded_features(curr_nodes, [specific_node], hashmap,
-                                                              dict_node_classes)
+                                                              dict_node_classes, mask_nodes=self.mask_nodes)
             else:
                 features = self.make_one_hot_encoded_features(curr_nodes, [specific_node], hashmap,
-                                                              dict_node_classes, mask_nodes=self.mask_nodes)
+                                                              dict_node_classes)
             assert np.sum(np.array(features).sum(axis=1) == 0) == 0
         elif feature_type == 'graph_based':
             if masking:
@@ -617,13 +618,17 @@ class DataProcessor:
                 {'y': torch.tensor(targets, dtype=torch.long), 'x': torch.tensor(features),
                  'weight': -torch.log(torch.tensor(weighted_edges[:, 2]) / 6600) if log_edge_weights else torch.tensor(weighted_edges[:, 2]),
                  'edge_index': torch.tensor(weighted_edges[:, :2].T, dtype=torch.long),
-                 'mask': node_mask})
+                 'mask': node_mask}) # implement correct and smooth for masking
         else:
             graph = Data.from_dict(
                 {'y': torch.tensor(targets, dtype=torch.long), 'x': torch.tensor(features),
-                 'weight': -torch.log(torch.tensor(weighted_edges[:, 2]) / 6600) if log_edge_weights else torch.tensor(weighted_edges[:, 2]),
+                 'weight': -torch.log(torch.tensor(weighted_edges[:, 2]) / 6600) if log_edge_weights else torch.tensor(weighted_edges[:, 2]), # try 1) log(IBD/8 * e) 2) 1 / T
                  'edge_index': torch.tensor(weighted_edges[:, :2].T, dtype=torch.long)})
 
+        if not masking and feature_type == 'one_hot':
+            # mask for correcting GNN predictions with label propagation
+            correct_and_smooth_mask = torch.tensor([True] * (len(targets)-1) + [False]).bool()
+            graph.correct_and_smooth_mask = correct_and_smooth_mask
         graph.num_classes = len(self.classes) - 1 if masking else len(self.classes)
 
         return graph
@@ -948,7 +953,7 @@ class NullSimulator:
 
 
 class Trainer:
-    def __init__(self, data: DataProcessor, model_cls, lr, wd, loss_fn, batch_size, log_dir, patience, num_epochs, feature_type, train_iterations_per_sample, evaluation_steps, weight=None, cuda_device_specified: int = None, masking=False, disable_printing=True, optimize_memory_transfer=True, model_params=None, seed=42, save_model_in_ram=False):
+    def __init__(self, data: DataProcessor, model_cls, lr, wd, loss_fn, batch_size, log_dir, patience, num_epochs, feature_type, train_iterations_per_sample, evaluation_steps, weight=None, cuda_device_specified: int = None, masking=False, disable_printing=True, optimize_memory_transfer=True, model_params=None, seed=42, save_model_in_ram=False, correct_and_smooth=False):
         self.data = data
         self.model = None
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') if cuda_device_specified is None else torch.device(f'cuda:{cuda_device_specified}' if torch.cuda.is_available() else 'cpu')
@@ -974,6 +979,7 @@ class Trainer:
         self.optimize_memory_transfer = optimize_memory_transfer
         self.seed = seed
         self.save_model_in_ram = save_model_in_ram
+        self.correct_and_smooth = correct_and_smooth
         
         if model_params is not None:
             for k, v in model_params.items():
@@ -981,11 +987,17 @@ class Trainer:
                     setattr(self, k, torch.tensor(v).to(self.device))
                 else:
                     setattr(self, k, v)
-                
-            print(self.weight)
-            print(self.learning_rate)
-            print(self.data.classes)
-            print(self.weight_decay)
+                    
+            if not self.disable_printing:    
+                print(self.weight)
+                print(self.learning_rate)
+                print(self.data.classes)
+                print(self.weight_decay)
+                print('CAS', self.correct_and_smooth)
+            
+        self.post = CorrectAndSmooth(num_correction_layers=2, correction_alpha=0.9,
+                        num_smoothing_layers=1, smoothing_alpha=0.0001,
+                        autoscale=True) if self.correct_and_smooth else None
 
     def compute_metrics_cross_entropy(self, graphs, mask=False, phase=None):
         y_true = []
@@ -993,11 +1005,19 @@ class Trainer:
 
         if self.feature_type == 'one_hot':
             for i in tqdm(range(len(graphs)), desc='Compute metrics', disable=self.disable_printing):
-                p = F.softmax(self.model(graphs[i].to(self.device))[-1],
-                              dim=0).cpu().detach().numpy()
-                y_pred.append(np.argmax(p))
-                y_true.append(int(graphs[i].y[-1].cpu().detach().numpy()))
-                graphs[i].to('cpu')
+                if self.correct_and_smooth:
+                    y_soft = F.softmax(self.model(graphs[i].to(self.device)), dim=-1).detach()
+                    y_soft = self.post.correct(y_soft, graphs[i].y[graphs[i].correct_and_smooth_mask], graphs[i].correct_and_smooth_mask, graphs[i].edge_index, graphs[i].weight.float())
+                    y_soft = self.post.smooth(y_soft, graphs[i].y[graphs[i].correct_and_smooth_mask], graphs[i].correct_and_smooth_mask, graphs[i].edge_index, graphs[i].weight.float())
+                    p = y_soft[-1].cpu().detach().numpy()
+                    y_pred.append(np.argmax(p))
+                    y_true.append(int(graphs[i].y[-1].cpu().detach().numpy()))
+                    graphs[i].to('cpu')
+                else:
+                    p = F.softmax(self.model(graphs[i].to(self.device))[-1], dim=0).cpu().detach().numpy()
+                    y_pred.append(np.argmax(p))
+                    y_true.append(int(graphs[i].y[-1].cpu().detach().numpy()))
+                    graphs[i].to('cpu')
         elif self.feature_type == 'graph_based':
             if not mask:
                 for i in tqdm(range(len(graphs)), desc='Compute metrics', disable=self.disable_printing):
@@ -1157,7 +1177,8 @@ class Trainer:
                         scheduler.step()
                         self.data.array_of_graphs_for_training[n].to('cpu')
                         
-                    print(f'Mean loss: {np.mean(mean_epoch_loss)}')
+                    if not self.disable_printing:
+                        print(f'Mean loss: {np.mean(mean_epoch_loss)}')
 
                     y_true, y_pred = self.compute_metrics_cross_entropy(self.data.array_of_graphs_for_training)
 
@@ -1232,7 +1253,7 @@ def independent_test(model_path, model_cls, df, vertex_id, gpu_id, test_type, ma
     valid_split = np.array([vertex_id])
     test_split = np.array([vertex_id])
     if mask_nodes is not None:
-        mask_data = np.array([mask_nodes])
+        mask_data = np.array(mask_nodes)
         train_split = np.array(list(filter(lambda node: node not in mask_data, train_split)))
         valid_split = np.array(list(filter(lambda node: node not in mask_data, valid_split)))
         test_split = np.array(list(filter(lambda node: node not in mask_data, test_split)))
@@ -2043,13 +2064,13 @@ class TAGConv_3l_512h_w_k3(torch.nn.Module):
         super(TAGConv_3l_512h_w_k3, self).__init__()
         self.conv1 = TAGConv(data.num_features, 512)
         self.conv2 = TAGConv(512, 512)
-        self.conv3 = TAGConv(512, int(data.num_classes))
+        self.conv3 = TAGConv(512, data.num_classes)
 
     def forward(self, data):
-        x, edge_index, edge_attr = data.x.float(), data.edge_index, data.weight.float()
-        x = F.elu(self.conv1(x, edge_index, edge_attr))
+        x_init, edge_index, edge_attr = data.x.float(), data.edge_index, data.weight.float()
+        x = F.elu(self.conv1(x_init, edge_index, edge_attr))
         x = F.elu(self.conv2(x, edge_index, edge_attr))
-        x = self.conv3(x, edge_index, edge_attr)
+        x = F.elu(self.conv3(x, edge_index, edge_attr))
         return x
     
     
@@ -2361,13 +2382,41 @@ class SAGEConv_3l_512h(torch.nn.Module):
         super(SAGEConv_3l_512h, self).__init__()
         self.conv1 = SAGEConv(data.num_features, 512)
         self.conv2 = SAGEConv(512, 512)
-        self.conv3 = SAGEConv(512, int(data.num_classes))
+        self.conv3 = SAGEConv(512, 256)
+        
+        self.n1 = GraphNorm(512)
+        self.n2 = GraphNorm(512)
+
+        self.fc1 = torch.nn.Linear(256, 256)
+        self.fc2 = torch.nn.Linear(256, 256)
+        self.fc3 = torch.nn.Linear(256, int(data.num_classes))
+
+        self.d1 = torch.nn.Dropout(0.5)
+        self.d2 = torch.nn.Dropout(0.5)
+
+        self.d3 = torch.nn.Dropout(0.25)
+        self.d4 = torch.nn.Dropout(0.25)
+
+        self.norm1 = torch.nn.LayerNorm(256)
+        self.norm2 = torch.nn.LayerNorm(256)
 
     def forward(self, data):
         x, edge_index, edge_attr = data.x.float(), data.edge_index, data.weight.float()
         x = F.elu(self.conv1(x, edge_index))
+        x = self.n1(x)
+        x = self.d1(x)
         x = F.elu(self.conv2(x, edge_index))
-        x = self.conv3(x, edge_index)
+        x = self.n2(x)
+        x = self.d2(x)
+        x = F.elu(self.conv3(x, edge_index))
+        
+        x = F.elu(self.fc1(x))
+        x = self.norm1(x)
+        x = self.d3(x)
+        x = F.elu(self.fc2(x))
+        x = self.norm2(x)
+        x = self.d3(x)
+        x = self.fc3(x)
         return x
     
     
