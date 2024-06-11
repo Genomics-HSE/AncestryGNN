@@ -506,6 +506,7 @@ def processpartition_nn(expresults, datafile, partition, maskednodes, classifier
             features = 'graph_based'
             train_dataset_type = "one"
         elif classifier["_type"] == 'comdet':
+            comdet = classifier["model"]
             if comdet == "LabelPropagation":
                 features = 'one_hot'
                 train_dataset_type = 'multiple'
