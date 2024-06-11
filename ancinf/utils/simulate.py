@@ -485,63 +485,80 @@ def processpartition_nn(expresults, datafile, partition, maskednodes, classifier
     test_split = np.array(test_list)
     if not(maskednodes is None):
         maskednodes = np.array(maskednodes)
-        
-    for classifier in classifiers:        
-        if classifier["_type"] in ['mlp', 'gnn']:
-            run_name = runbasename + "_"+classifier["_title"]            
-            print("NEW RUN:", run_name)        
-            starttime = time.time()        
-            runresult = simplified_genlink_run(datafile, train_split, valid_split, test_split, run_name, classifier, logweights=log_weights, gpu=gpuidx, maskednodes=maskednodes)
-            runtime = time.time() - starttime
-            runresult["time"] = runtime        
-            print("RUN COMPLETE!", classifier["_title"], runresult)
-            expresults[classifier["_title"]].append(runresult)
+
+    dataprocessors = {'one_hot': None, 'graph_based': None, 'simple': None}
+    
+    for classifier in classifiers: 
+        #print(classifier)
+        if classifier['_type'] == 'heur':
+            continue
+        run_name = runbasename + "_"+classifier["_title"]
+        masking = not (maskednodes is None)
+        # check if we already created dataprocessor        
+        if classifier['_type'] == 'gnn':
+            if classifier['model'][-3:] == '_gb': 
+                features = 'graph_based'
+                train_dataset_type = "one"
+            else:
+                features = 'one_hot'
+                train_dataset_type = 'multiple'
+        elif classifier['_type'] == 'mlp':
+            features = 'graph_based'
+            train_dataset_type = "one"
         elif classifier["_type"] == 'comdet':
-            comdet = classifier["model"]
-            #community detection    
-            starttime = time.time()
-            if comdet == "Spectral":
-                dp = DataProcessor(datafile)
-                dp.load_train_valid_test_nodes(train_split, valid_split, test_split, 'numpy')        
-                bm = BaselineMethods(dp)                
-                score = bm.spectral_clustering()                
-            if comdet == "Agglomerative":
-                dp = DataProcessor(datafile)
-                dp.load_train_valid_test_nodes(train_split, valid_split, test_split, 'numpy')        
-                bm = BaselineMethods(dp)                
-                score = bm.agglomerative_clustering()                
-            if comdet == "Girvan-Newmann":
-                dp = DataProcessor(datafile)
-                dp.load_train_valid_test_nodes(train_split, valid_split, test_split, 'numpy')        
-                bm = BaselineMethods(dp)                
-                score = bm.girvan_newman()  
             if comdet == "LabelPropagation":
-                dplp = DataProcessor(datafile)
-                dplp.load_train_valid_test_nodes(train_split, valid_split, test_split, 'numpy')        
-                dplp.make_train_valid_test_datasets_with_numba('one_hot', 'homogeneous', 'multiple', 'multiple', 'tmp')
-                bmlp  = BaselineMethods(dplp)                
-                score = bmlp.torch_geometric_label_propagation(1, 0.0001)  
-            if comdet == "RelationalNeighbor":
-                dp = DataProcessor(datafile)
-                dp.load_train_valid_test_nodes(train_split, valid_split, test_split, 'numpy') 
-                bm = BaselineMethods(dp)
-                score = bm.relational_neighbor_classifier(0.001)        
-            if comdet == "MultiRankWalk":
-                dp = DataProcessor(datafile)
-                dp.load_train_valid_test_nodes(train_split, valid_split, test_split, 'numpy') 
-                bm = BaselineMethods(dp)
-                score = bm.multi_rank_walk(0.8)      
-            if comdet == "RidgeRegression":
-                dp = DataProcessor(datafile)
-                dp.load_train_valid_test_nodes(train_split, valid_split, test_split, 'numpy') 
-                bm = BaselineMethods(dp)
-                score = bm.ridge_regression(0.5, 3)
+                features = 'one_hot'
+                train_dataset_type = 'multiple'
+            else:
+                features = 'simple'
+        
+        if dataprocessors[features] is None:
+            print("New dataprocessor...")
+            dp = DataProcessor(datafile)
+            dp.load_train_valid_test_nodes(train_split, valid_split, test_split, 'numpy', mask_path = maskednodes)
+            if features != 'simple':
+                dp.make_train_valid_test_datasets_with_numba(features, 'homogeneous', train_dataset_type, 'multiple', 
+                                                             run_name, log_edge_weights=log_weights, masking = masking)    
+            dataprocessors[features] = dp
+            print("Dataprocessor loaded")
+        else:
+            print("Dataprocessor already exists")
+            dp = dataprocessors[features]
+        
+        print("NEW RUN:", run_name)        
+        starttime = time.time()        
+        if classifier['_type'] == 'gnn':
+            trainer = Trainer(dp, GNNs[classifier['model']], 0.0001, 5e-5, torch.nn.CrossEntropyLoss, 10, run_name, 2, 20,
+                      features, 50, 10, cuda_device_specified=gpuidx, masking = masking, model_params = classifier)
+            runresult = trainer.run()
+        elif classifier['_type'] == 'mlp':
+            trainer = Trainer(dp, MLPs[classifier['model']], 0.0001, 5e-5, torch.nn.CrossEntropyLoss, 10, run_name, 2, 50,
+                      features, 50, 10, cuda_device_specified=gpuidx, masking = masking, model_params = classifier)
+            runresult = trainer.run()
+        elif classifier["_type"] == 'comdet':
+            #community detection
+            comdet = classifier["model"]
+            starttime = time.time()
+            bm = BaselineMethods(dp)
+            if comdet == "Spectral":                
+                runresult = bm.spectral_clustering()                
+            elif comdet == "Agglomerative":            
+                runresult = bm.agglomerative_clustering()                
+            elif comdet == "Girvan-Newmann":                
+                runresult = bm.girvan_newman()  
+            elif comdet == "LabelPropagation":                
+                runresult = bmlp.torch_geometric_label_propagation(1, 0.0001)  
+            elif comdet == "RelationalNeighbor":
+                runresult = bm.relational_neighbor_classifier(0.001)        
+            elif comdet == "MultiRankWalk":
+                runresult = bm.multi_rank_walk(0.8)      
+            elif comdet == "RidgeRegression":
+                runresult = bm.ridge_regression(0.5, 3)
                 
-            runtime = time.time() - starttime
-            print(comdet,":", score)
-            runresult = score
-            runresult["time"] = runtime            
-            expresults[classifier["_title"]].append(runresult)
+        runtime = time.time() - starttime
+        runresult["time"] = runtime
+        print("RUN COMPLETE!", classifier["_title"], runresult)
+        expresults[classifier["_title"]].append(runresult)
 
 
 def inference(workdir, infile, inferdf, gpu=0):
@@ -915,32 +932,6 @@ def runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tospl
             #end partition loop
     shutil.move(os.path.join(workdir, outfile+'.incomplete'), os.path.join(workdir, outfile))
     return os.path.join(workdir, outfile)
-
-
-def simplified_genlink_run(dataframe_path, train_split, valid_split, test_split, rundir, classifier, logweights=False, gpu=0, maskednodes=None):
-    '''
-        returns f1 macro for one experiment
-    '''
-    dp = DataProcessor(dataframe_path)
-    dp.load_train_valid_test_nodes(train_split, valid_split, test_split, 'numpy', mask_path = maskednodes)
-    masking = not (maskednodes is None)
-    if classifier['_type'] == 'gnn':
-        if classifier['model'][-3:] == '_gb': 
-            features = 'graph_based'
-            train_dataset_type = "one"
-        else:
-            features = 'one_hot'
-            train_dataset_type = 'multiple'
-        dp.make_train_valid_test_datasets_with_numba(features, 'homogeneous', train_dataset_type, 'multiple', rundir, log_edge_weights=logweights, masking = masking)    
-        trainer = Trainer(dp, GNNs[classifier['model']], 0.0001, 5e-5, torch.nn.CrossEntropyLoss, 10, rundir, 2, 20,
-                      features, 50, 10, cuda_device_specified=gpu, masking = masking, model_params = classifier)
-    elif classifier['_type'] == 'gnn': 
-        # mlp
-        dp.make_train_valid_test_datasets_with_numba('graph_based', 'homogeneous', 'one', 'multiple', rundir, log_edge_weights=logweights, masking=masking)    
-        trainer = Trainer(dp, MLPs[classifier['model']], 0.0001, 5e-5, torch.nn.CrossEntropyLoss, 10, rundir, 2, 50,
-                      'graph_based', 50, 10, cuda_device_specified=gpu, masking = masking, model_params = classifier)
-
-    return trainer.run()           
 
 
 def getplotdata(explistfile, resultfile, parameter):
