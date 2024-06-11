@@ -547,7 +547,7 @@ def processpartition_nn(expresults, datafile, partition, maskednodes, classifier
             elif comdet == "Girvan-Newmann":                
                 runresult = bm.girvan_newman()  
             elif comdet == "LabelPropagation":                
-                runresult = bmlp.torch_geometric_label_propagation(1, 0.0001)  
+                runresult = bm.torch_geometric_label_propagation(1, 0.0001)  
             elif comdet == "RelationalNeighbor":
                 runresult = bm.relational_neighbor_classifier(0.001)        
             elif comdet == "MultiRankWalk":
