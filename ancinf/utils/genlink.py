@@ -2070,7 +2070,7 @@ class TAGConv_3l_512h_w_k3(torch.nn.Module):
         x_init, edge_index, edge_attr = data.x.float(), data.edge_index, data.weight.float()
         x = F.elu(self.conv1(x_init, edge_index, edge_attr))
         x = F.elu(self.conv2(x, edge_index, edge_attr))
-        x = F.elu(self.conv3(x, edge_index, edge_attr))
+        x = self.conv3(x, edge_index, edge_attr)
         return x
     
     
@@ -2382,41 +2382,14 @@ class SAGEConv_3l_512h(torch.nn.Module):
         super(SAGEConv_3l_512h, self).__init__()
         self.conv1 = SAGEConv(data.num_features, 512)
         self.conv2 = SAGEConv(512, 512)
-        self.conv3 = SAGEConv(512, 256)
-        
-        self.n1 = GraphNorm(512)
-        self.n2 = GraphNorm(512)
-
-        self.fc1 = torch.nn.Linear(256, 256)
-        self.fc2 = torch.nn.Linear(256, 256)
-        self.fc3 = torch.nn.Linear(256, int(data.num_classes))
-
-        self.d1 = torch.nn.Dropout(0.5)
-        self.d2 = torch.nn.Dropout(0.5)
-
-        self.d3 = torch.nn.Dropout(0.25)
-        self.d4 = torch.nn.Dropout(0.25)
-
-        self.norm1 = torch.nn.LayerNorm(256)
-        self.norm2 = torch.nn.LayerNorm(256)
+        self.conv3 = SAGEConv(512, int(data.num_classes))
 
     def forward(self, data):
         x, edge_index, edge_attr = data.x.float(), data.edge_index, data.weight.float()
         x = F.elu(self.conv1(x, edge_index))
-        x = self.n1(x)
-        x = self.d1(x)
         x = F.elu(self.conv2(x, edge_index))
-        x = self.n2(x)
-        x = self.d2(x)
-        x = F.elu(self.conv3(x, edge_index))
+        x = self.conv3(x, edge_index)
         
-        x = F.elu(self.fc1(x))
-        x = self.norm1(x)
-        x = self.d3(x)
-        x = F.elu(self.fc2(x))
-        x = self.norm2(x)
-        x = self.d3(x)
-        x = self.fc3(x)
         return x
     
     
