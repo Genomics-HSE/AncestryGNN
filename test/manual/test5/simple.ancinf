@@ -43,6 +43,11 @@
                 "model":"TAGConv_3l_512h_w_k3",
                 "title":"TAGCONV",
                 "param1":25
+            },
+            {
+                "model":"TAGConv_3l_512h_w_k3",
+                "title":"TAGCONV2",
+                "param1":26
             }
         ]        
     },
