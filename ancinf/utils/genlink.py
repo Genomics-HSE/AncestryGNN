@@ -957,6 +957,8 @@ class Trainer:
         self.data = data
         self.model = None
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') if cuda_device_specified is None else torch.device(f'cuda:{cuda_device_specified}' if torch.cuda.is_available() else 'cpu')
+        self.gpuidx = cuda_device_specified
+        self.gpumem = 0
         self.model_cls = model_cls
         self.learning_rate = lr
         self.weight_decay = wd
@@ -1126,7 +1128,7 @@ class Trainer:
         else:
             self.model = self.model.eval().cpu()
 
-        return {'f1_macro': f1_macro_score, 'f1_weighted': f1_weighted_score, 'accuracy':acc, 'class_scores': f1_macro_score_per_class, 'skipped_nodes': len(self.data.test_nodes) - len(self.data.array_of_graphs_for_testing)}
+        return {'f1_macro': f1_macro_score, 'f1_weighted': f1_weighted_score, 'accuracy':acc, 'class_scores': f1_macro_score_per_class, 'skipped_nodes': len(self.data.test_nodes) - len(self.data.array_of_graphs_for_testing), 'gpu_memory': self.gpumem}
         
 
     def run(self):
@@ -1238,7 +1240,8 @@ class Trainer:
 
             else:
                 raise Exception('Trainer is not implemented for such feature type name!')
-
+            if not (self.gpuidx is None):
+                self.gpumem = torch.cuda.memory_allocated(self.gpuidx)/1024/1024/1024
             return self.test(mask=self.masking)
         
 
