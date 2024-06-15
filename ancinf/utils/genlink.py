@@ -1004,60 +1004,74 @@ class Trainer:
     def compute_metrics_cross_entropy(self, graphs, mask=False, phase=None):
         y_true = []
         y_pred = []
+        
+        gc.collect()
+        torch.cuda.empty_cache()
 
         if self.feature_type == 'one_hot':
             for i in tqdm(range(len(graphs)), desc='Compute metrics', disable=self.disable_printing):
                 if self.correct_and_smooth:
-                    y_soft = F.softmax(self.model(graphs[i].to(self.device)), dim=-1).detach()
+                    graphs[i] = graphs[i].to(self.device)
+                    y_soft = F.softmax(self.model(graphs[i]), dim=-1).detach()
                     y_soft = self.post.correct(y_soft, graphs[i].y[graphs[i].correct_and_smooth_mask], graphs[i].correct_and_smooth_mask, graphs[i].edge_index, graphs[i].weight.float())
                     y_soft = self.post.smooth(y_soft, graphs[i].y[graphs[i].correct_and_smooth_mask], graphs[i].correct_and_smooth_mask, graphs[i].edge_index, graphs[i].weight.float())
                     p = y_soft[-1].detach().to('cpu').numpy()
                     y_pred.append(np.argmax(p))
                     y_true.append(int(graphs[i].y[-1].detach().to('cpu').numpy()))
-                    graphs[i].to('cpu')
+                    graphs[i] = graphs[i].to('cpu')
                 else:
-                    p = F.softmax(self.model(graphs[i].to(self.device))[-1], dim=0).detach().to('cpu').numpy()
+                    graphs[i] = graphs[i].to(self.device)
+                    p = F.softmax(self.model(graphs[i])[-1], dim=0).detach().to('cpu').numpy()
                     y_pred.append(np.argmax(p))
                     y_true.append(int(graphs[i].y[-1].detach().to('cpu').numpy()))
-                    graphs[i].to('cpu')
+                    graphs[i] = graphs[i].to('cpu')
         elif self.feature_type == 'graph_based':
             if not mask:
                 for i in tqdm(range(len(graphs)), desc='Compute metrics', disable=self.disable_printing):
                     if phase=='training':
-                        p = F.softmax(self.model(graphs[i].to(self.device)),
+                        graphs[i] = graphs[i].to(self.device)
+                        p = F.softmax(self.model(graphs[i]),
                                       dim=0).detach().to('cpu').numpy()
                         y_pred = np.argmax(p, axis=1)
                         y_true = graphs[i].y.detach().to('cpu')
                     elif phase=='scoring':
-                        p = F.softmax(self.model(graphs[i].to(self.device))[-1],
+                        graphs[i] = graphs[i].to(self.device)
+                        p = F.softmax(self.model(graphs[i])[-1],
                                       dim=0).detach().to('cpu').numpy()
                         y_pred.append(np.argmax(p))
                         y_true.append(graphs[i].y[-1].detach().to('cpu'))
                     else:
                         raise Exception('No such phase!')
-                    graphs[i].to('cpu')
+                    graphs[i] = graphs[i].to('cpu')
             else:
                 for i in tqdm(range(len(graphs)), desc='Compute metrics', disable=self.disable_printing):
                     if phase=='training':
-                        p = F.softmax(self.model(graphs[i].to(self.device)),
+                        graphs[i] = graphs[i].to(self.device)
+                        p = F.softmax(self.model(graphs[i]),
                                       dim=0)
                         p = p[graphs[i].mask].detach().to('cpu').numpy()
                         y_pred = np.argmax(p, axis=1)
                         y_true = graphs[i].y.detach().to('cpu')
                     elif phase=='scoring':
-                        p = F.softmax(self.model(graphs[i].to(self.device))[-1],
+                        graphs[i] = graphs[i].to(self.device)
+                        p = F.softmax(self.model(graphs[i])[-1],
                                       dim=0).detach().to('cpu').numpy()
                         y_pred.append(np.argmax(p))
                         y_true.append(graphs[i].y[-1].detach().to('cpu'))
                     else:
                         raise Exception('No such phase!')
-                    graphs[i].to('cpu')
+                    graphs[i] = graphs[i].to('cpu')
         else:
             raise Exception('Trainer is not implemented for such feature type name while calculating training scores!')
 
+        gc.collect()
+        torch.cuda.empty_cache()
         return y_true, y_pred
 
     def evaluation(self, i, mask=False):
+        gc.collect()
+        torch.cuda.empty_cache()
+        
         self.model.eval()
 
         y_true, y_pred = self.compute_metrics_cross_entropy(self.data.array_of_graphs_for_validation, mask=mask, phase='scoring')
@@ -1082,8 +1096,13 @@ class Trainer:
             self.patience_counter += 1
             if not self.disable_printing:
                 print(f'Metric was not improved for the {self.patience_counter}th time')
+                
+        gc.collect()
+        torch.cuda.empty_cache()
 
     def test(self, plot_cm=False, mask=False):
+        gc.collect()
+        torch.cuda.empty_cache()
         self.model = self.model_cls(self.data.array_of_graphs_for_training[0]).to(self.device)
         self.model.load_state_dict(torch.load(self.log_dir + '/model_best.bin'))
         self.model.eval()
@@ -1167,17 +1186,17 @@ class Trainer:
 
                     pbar = tqdm(range(len(selector)), desc='Training samples', disable=self.disable_printing)
                     pbar.set_postfix({'val_best_score': self.max_f1_score_macro})
-                    for j, data_curr in enumerate(pbar):
+                    for j in pbar:
                         n = selector[j]
-                        data_curr = self.data.array_of_graphs_for_training[n].to(self.device)
                         optimizer.zero_grad()
-                        out = self.model(data_curr)
-                        loss = criterion(out[-1], data_curr.y[-1])
+                        self.data.array_of_graphs_for_training[n] = self.data.array_of_graphs_for_training[n].to(self.device)
+                        out = self.model(self.data.array_of_graphs_for_training[n])
+                        loss = criterion(out[-1], self.data.array_of_graphs_for_training[n].y[-1])
                         loss.backward()
                         mean_epoch_loss.append(loss.detach().to('cpu').numpy())
                         optimizer.step()
                         scheduler.step()
-                        self.data.array_of_graphs_for_training[n].to('cpu')
+                        self.data.array_of_graphs_for_training[n] = self.data.array_of_graphs_for_training[n].to('cpu')
                         
                     if not self.disable_printing:
                         print(f'Mean loss: {np.mean(mean_epoch_loss)}')
@@ -1190,7 +1209,7 @@ class Trainer:
                     
             elif self.feature_type == 'graph_based':
                 if self.masking:
-                    data_curr = self.data.array_of_graphs_for_training[0].to(self.device)
+                    self.data.array_of_graphs_for_training[0] = self.data.array_of_graphs_for_training[0].to(self.device)
                     self.model.train()
                     for i in tqdm(range(self.train_iterations_per_sample), desc='Training iterations', disable=self.disable_printing):
                         if self.patience_counter == self.patience:
@@ -1202,19 +1221,19 @@ class Trainer:
                                 print('Training report')
                                 print(classification_report(y_true, y_pred))
 
-                            self.data.array_of_graphs_for_training[0].to('cpu')
+                            self.data.array_of_graphs_for_training[0] = self.data.array_of_graphs_for_training[0].to('cpu')
                             self.evaluation(i, mask=True)
                             self.model.train()
-                            self.data.array_of_graphs_for_training[0].to(self.device)
+                            self.data.array_of_graphs_for_training[0] = self.data.array_of_graphs_for_training[0].to(self.device)
 
                         optimizer.zero_grad()
-                        out = self.model(data_curr)
-                        loss = criterion(out[data_curr.mask], data_curr.y[data_curr.mask])
+                        out = self.model(self.data.array_of_graphs_for_training[0])
+                        loss = criterion(out[self.data.array_of_graphs_for_training[0].mask], self.data.array_of_graphs_for_training[0].y[self.data.array_of_graphs_for_training[0].mask])
                         loss.backward()
                         optimizer.step()
                         scheduler.step()
                 else:
-                    data_curr = self.data.array_of_graphs_for_training[0].to(self.device)
+                    self.data.array_of_graphs_for_training[0] = self.data.array_of_graphs_for_training[0].to(self.device)
                     self.model.train()
                     for i in tqdm(range(self.train_iterations_per_sample), desc='Training iterations', disable=self.disable_printing):
                         if self.patience_counter == self.patience:
@@ -1226,14 +1245,14 @@ class Trainer:
                                 print('Training report')
                                 print(classification_report(y_true, y_pred))
 
-                            self.data.array_of_graphs_for_training[0].to('cpu')
+                            self.data.array_of_graphs_for_training[0] = self.data.array_of_graphs_for_training[0].to('cpu')
                             self.evaluation(i)
                             self.model.train()
-                            self.data.array_of_graphs_for_training[0].to(self.device)
+                            self.data.array_of_graphs_for_training[0] = self.data.array_of_graphs_for_training[0].to(self.device)
 
                         optimizer.zero_grad()
-                        out = self.model(data_curr)
-                        loss = criterion(out, data_curr.y)
+                        out = self.model(self.data.array_of_graphs_for_training[0])
+                        loss = criterion(out, self.data.array_of_graphs_for_training[0].y)
                         loss.backward()
                         optimizer.step()
                         scheduler.step()
