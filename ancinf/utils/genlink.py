@@ -1009,28 +1009,28 @@ class Trainer:
                     y_soft = F.softmax(self.model(graphs[i].to(self.device)), dim=-1).detach()
                     y_soft = self.post.correct(y_soft, graphs[i].y[graphs[i].correct_and_smooth_mask], graphs[i].correct_and_smooth_mask, graphs[i].edge_index, graphs[i].weight.float())
                     y_soft = self.post.smooth(y_soft, graphs[i].y[graphs[i].correct_and_smooth_mask], graphs[i].correct_and_smooth_mask, graphs[i].edge_index, graphs[i].weight.float())
-                    p = y_soft[-1].cpu().detach().numpy()
+                    p = y_soft[-1].detach().to('cpu').numpy()
                     y_pred.append(np.argmax(p))
-                    y_true.append(int(graphs[i].y[-1].cpu().detach().numpy()))
+                    y_true.append(int(graphs[i].y[-1].detach().to('cpu').numpy()))
                     graphs[i].to('cpu')
                 else:
-                    p = F.softmax(self.model(graphs[i].to(self.device))[-1], dim=0).cpu().detach().numpy()
+                    p = F.softmax(self.model(graphs[i].to(self.device))[-1], dim=0).detach().to('cpu').numpy()
                     y_pred.append(np.argmax(p))
-                    y_true.append(int(graphs[i].y[-1].cpu().detach().numpy()))
+                    y_true.append(int(graphs[i].y[-1].detach().to('cpu').numpy()))
                     graphs[i].to('cpu')
         elif self.feature_type == 'graph_based':
             if not mask:
                 for i in tqdm(range(len(graphs)), desc='Compute metrics', disable=self.disable_printing):
                     if phase=='training':
                         p = F.softmax(self.model(graphs[i].to(self.device)),
-                                      dim=0).cpu().detach().numpy()
+                                      dim=0).detach().to('cpu').numpy()
                         y_pred = np.argmax(p, axis=1)
-                        y_true = graphs[i].y.cpu().detach()
+                        y_true = graphs[i].y.detach().to('cpu')
                     elif phase=='scoring':
                         p = F.softmax(self.model(graphs[i].to(self.device))[-1],
-                                      dim=0).cpu().detach().numpy()
+                                      dim=0).detach().to('cpu').numpy()
                         y_pred.append(np.argmax(p))
-                        y_true.append(graphs[i].y[-1].cpu().detach())
+                        y_true.append(graphs[i].y[-1].detach().to('cpu'))
                     else:
                         raise Exception('No such phase!')
                     graphs[i].to('cpu')
@@ -1039,14 +1039,14 @@ class Trainer:
                     if phase=='training':
                         p = F.softmax(self.model(graphs[i].to(self.device)),
                                       dim=0)
-                        p = p[graphs[i].mask].cpu().detach().numpy()
+                        p = p[graphs[i].mask].detach().to('cpu').numpy()
                         y_pred = np.argmax(p, axis=1)
-                        y_true = graphs[i].y.cpu().detach()
+                        y_true = graphs[i].y.detach().to('cpu')
                     elif phase=='scoring':
                         p = F.softmax(self.model(graphs[i].to(self.device))[-1],
-                                      dim=0).cpu().detach().numpy()
+                                      dim=0).detach().to('cpu').numpy()
                         y_pred.append(np.argmax(p))
-                        y_true.append(graphs[i].y[-1].cpu().detach())
+                        y_true.append(graphs[i].y[-1].detach().to('cpu'))
                     else:
                         raise Exception('No such phase!')
                     graphs[i].to('cpu')
@@ -1124,7 +1124,7 @@ class Trainer:
             gc.collect() # Python thing
             torch.cuda.empty_cache() # PyTorch thing
         else:
-            self.model = self.model.eval().cpu()
+            self.model = self.model.eval().to('cpu')
 
         return {'f1_macro': f1_macro_score, 'f1_weighted': f1_weighted_score, 'accuracy':acc, 'class_scores': f1_macro_score_per_class, 'skipped_nodes': len(self.data.test_nodes) - len(self.data.array_of_graphs_for_testing)}
         
@@ -1172,7 +1172,7 @@ class Trainer:
                         out = self.model(data_curr)
                         loss = criterion(out[-1], data_curr.y[-1])
                         loss.backward()
-                        mean_epoch_loss.append(loss.detach().cpu().numpy())
+                        mean_epoch_loss.append(loss.detach().to('cpu').numpy())
                         optimizer.step()
                         scheduler.step()
                         self.data.array_of_graphs_for_training[n].to('cpu')
@@ -1273,7 +1273,7 @@ def independent_test(model_path, model_cls, df, vertex_id, gpu_id, test_type, ma
     model.load_state_dict(torch.load(model_path))
     model.eval()
     
-    p = F.softmax(model(dp.array_of_graphs_for_testing[0].to(device))[-1], dim=0).cpu().detach().numpy()
+    p = F.softmax(model(dp.array_of_graphs_for_testing[0].to(device))[-1], dim=0).detach().to('cpu').numpy()
     dp.array_of_graphs_for_testing[0].to('cpu')
     return dp.classes[np.argmax(p)]
     
