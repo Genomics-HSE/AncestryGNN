@@ -287,10 +287,41 @@ class DataProcessor:
             self.valid_nodes = [self.node_names_to_int_mapping[f'node_{node}'] for node in valid_path]
             self.test_nodes = [self.node_names_to_int_mapping[f'node_{node}'] for node in test_path]
             if mask_path is not None:
+                for mask_node in mask_path:
+                    if f'node_{mask_node}' not in self.node_names_to_int_mapping.keys():
+                        if not self.disable_printing:
+                            print(f'Adding isolated masked node {mask_node}')
+                        self.node_names_to_int_mapping[f'node_{mask_node}'] = len(self.node_names_to_int_mapping)
+                        self.node_classes_sorted = pd.concat([self.node_classes_sorted, pd.DataFrame([[self.node_names_to_int_mapping[f'node_{mask_node}'], self.classes.index('masked')]], columns=['node', 'class_id'])], axis=0)
+                        self.node_classes_sorted = self.node_classes_sorted.sort_values(by=['node'])
                 self.mask_nodes = [self.node_names_to_int_mapping[f'node_{node}'] for node in mask_path]
                 self.train_nodes = list(filter(lambda node: node not in self.mask_nodes, self.train_nodes))
                 self.valid_nodes = list(filter(lambda node: node not in self.mask_nodes, self.valid_nodes))
                 self.test_nodes = list(filter(lambda node: node not in self.mask_nodes, self.test_nodes))
+                
+                # for node in train_path:
+                #     if node in self.mask_nodes:
+                #         print('Removing mask node from train nodes')
+                #         self.mask_nodes.remove(node)
+                
+                for node in valid_path:
+                    if node in self.mask_nodes:
+                        if not self.disable_printing:
+                            print('Removing mask node from validation nodes')
+                        self.mask_nodes.remove(node)
+                        
+                for node in test_path:
+                    if node in self.mask_nodes:
+                        if not self.disable_printing:
+                            print('Removing mask node from test nodes')
+                        self.mask_nodes.remove(node)
+                        
+            assert len(self.mask_nodes) > 0
+            assert len(set(self.train_nodes) & set(self.mask_nodes)) == 0
+            assert len(self.train_nodes) > 0
+            assert len(self.valid_nodes) > 0
+            assert len(self.test_nodes) > 0
+                
             
         # if data_type == 'object':
         #     self.train_nodes = train_path
@@ -537,11 +568,13 @@ class DataProcessor:
 
     @staticmethod
     @njit(cache=True)
-    def drop_rows_for_training_dataset(df, test_nodes):
+    def drop_rows_for_training_dataset(df, keep_nodes):
         drop_rows = []
         for i in range(df.shape[0]):  # speed it up in future
             row = df[i, :]
-            if int(row[0]) in test_nodes or int(row[1]) in test_nodes:
+            if int(row[0]) in keep_nodes and int(row[1]) in keep_nodes:
+                continue
+            else:
                 drop_rows.append(i)
 
         return drop_rows
@@ -588,7 +621,6 @@ class DataProcessor:
         return torch.tensor(mask)
 
     def generate_graph(self, curr_nodes, specific_node, dict_node_classes, df, log_edge_weights, feature_type, masking):
-
         hashmap = self.make_hashmap(curr_nodes)
         if feature_type == 'one_hot':
             if masking:
@@ -633,7 +665,7 @@ class DataProcessor:
 
         return graph
 
-    def make_train_valid_test_datasets_with_numba(self, feature_type, model_type, train_dataset_type, test_dataset_type, dataset_name, log_edge_weights=False, skip_train_val=False, masking=False):
+    def make_train_valid_test_datasets_with_numba(self, feature_type, model_type, train_dataset_type, test_dataset_type, dataset_name, log_edge_weights=False, skip_train_val=False, masking=False, save_isolated_nodes=True):
 
         self.dataset_name = dataset_name
 
@@ -647,7 +679,10 @@ class DataProcessor:
             if train_dataset_type == 'multiple' and test_dataset_type == 'multiple':
                 dict_node_classes = self.node_classes_to_dict()
                 df_for_training = self.df.copy()
-                drop_rows = self.drop_rows_for_training_dataset(self.df.to_numpy(), numba.typed.List(self.valid_nodes + self.test_nodes))
+                if masking:
+                    drop_rows = self.drop_rows_for_training_dataset(self.df.to_numpy(), numba.typed.List(self.train_nodes + self.mask_nodes))
+                else:
+                    drop_rows = self.drop_rows_for_training_dataset(self.df.to_numpy(), numba.typed.List(self.train_nodes))
                 df_for_training = df_for_training.drop(drop_rows)
 
                 # make training samples
@@ -659,6 +694,8 @@ class DataProcessor:
                             curr_train_nodes, specific_node = self.place_specific_node_to_the_end(self.train_nodes, k)
 
                         graph = self.generate_graph(curr_train_nodes, specific_node, dict_node_classes, df_for_training, log_edge_weights, feature_type, masking=masking)
+                        
+                        assert graph.x.shape[0] == len(curr_train_nodes)
 
                         self.array_of_graphs_for_training.append(graph)
 
@@ -687,6 +724,8 @@ class DataProcessor:
                             current_valid_nodes = self.train_nodes + [specific_node]
 
                         graph = self.generate_graph(current_valid_nodes, specific_node, dict_node_classes, df_for_validation, log_edge_weights, feature_type, masking=masking)
+                        
+                        assert graph.x.shape[0] == len(current_valid_nodes)
 
                         self.array_of_graphs_for_validation.append(graph)
 
@@ -714,6 +753,8 @@ class DataProcessor:
                         current_test_nodes = self.train_nodes + [specific_node]
 
                     graph = self.generate_graph(current_test_nodes, specific_node, dict_node_classes, df_for_testing, log_edge_weights, feature_type, masking=masking)
+                    
+                    assert graph.x.shape[0] == len(current_test_nodes)
 
                     self.array_of_graphs_for_testing.append(graph)
 
@@ -721,7 +762,10 @@ class DataProcessor:
             if train_dataset_type == 'one' and test_dataset_type == 'multiple':
                 dict_node_classes = self.node_classes_to_dict()
                 df_for_training = self.df.copy()
-                drop_rows = self.drop_rows_for_training_dataset(self.df.to_numpy(), numba.typed.List(self.valid_nodes + self.test_nodes))
+                if masking:
+                    drop_rows = self.drop_rows_for_training_dataset(self.df.to_numpy(), numba.typed.List(self.train_nodes + self.mask_nodes))
+                else:
+                    drop_rows = self.drop_rows_for_training_dataset(self.df.to_numpy(), numba.typed.List(self.train_nodes))
                 df_for_training = df_for_training.drop(drop_rows)
 
                 # make training samples
@@ -734,6 +778,8 @@ class DataProcessor:
                             current_train_nodes = self.train_nodes
 
                         graph = self.generate_graph(current_train_nodes, -1, dict_node_classes, df_for_training, log_edge_weights, feature_type, masking=masking)
+                        
+                        assert graph.x.shape[0] == len(current_train_nodes)
 
                         self.array_of_graphs_for_training.append(graph)
 
@@ -762,6 +808,8 @@ class DataProcessor:
                             current_valid_nodes = self.train_nodes + [specific_node] # important to place specific_node in the end
 
                         graph = self.generate_graph(current_valid_nodes, specific_node, dict_node_classes, df_for_validation, log_edge_weights, feature_type, masking=masking)
+                        
+                        assert graph.x.shape[0] == len(current_valid_nodes)
 
                         self.array_of_graphs_for_validation.append(graph)
 
@@ -789,6 +837,8 @@ class DataProcessor:
                         current_test_nodes = self.train_nodes + [specific_node] # important to place specific_node in the end
 
                     graph = self.generate_graph(current_test_nodes, specific_node, dict_node_classes, df_for_testing, log_edge_weights, feature_type, masking=masking)
+                    
+                    assert graph.x.shape[0] == len(current_test_nodes)
 
                     self.array_of_graphs_for_testing.append(graph)
 
@@ -1004,74 +1054,60 @@ class Trainer:
     def compute_metrics_cross_entropy(self, graphs, mask=False, phase=None):
         y_true = []
         y_pred = []
-        
-        gc.collect()
-        torch.cuda.empty_cache()
 
         if self.feature_type == 'one_hot':
             for i in tqdm(range(len(graphs)), desc='Compute metrics', disable=self.disable_printing):
                 if self.correct_and_smooth:
-                    graphs[i] = graphs[i].to(self.device)
-                    y_soft = F.softmax(self.model(graphs[i]), dim=-1).detach()
+                    y_soft = F.softmax(self.model(graphs[i].to(self.device)), dim=-1).detach()
                     y_soft = self.post.correct(y_soft, graphs[i].y[graphs[i].correct_and_smooth_mask], graphs[i].correct_and_smooth_mask, graphs[i].edge_index, graphs[i].weight.float())
                     y_soft = self.post.smooth(y_soft, graphs[i].y[graphs[i].correct_and_smooth_mask], graphs[i].correct_and_smooth_mask, graphs[i].edge_index, graphs[i].weight.float())
-                    p = y_soft[-1].detach().to('cpu').numpy()
+                    p = y_soft[-1].cpu().detach().numpy()
                     y_pred.append(np.argmax(p))
-                    y_true.append(int(graphs[i].y[-1].detach().to('cpu').numpy()))
-                    graphs[i] = graphs[i].to('cpu')
+                    y_true.append(int(graphs[i].y[-1].cpu().detach().numpy()))
+                    graphs[i].to('cpu')
                 else:
-                    graphs[i] = graphs[i].to(self.device)
-                    p = F.softmax(self.model(graphs[i])[-1], dim=0).detach().to('cpu').numpy()
+                    p = F.softmax(self.model(graphs[i].to(self.device))[-1], dim=0).cpu().detach().numpy()
                     y_pred.append(np.argmax(p))
-                    y_true.append(int(graphs[i].y[-1].detach().to('cpu').numpy()))
-                    graphs[i] = graphs[i].to('cpu')
+                    y_true.append(int(graphs[i].y[-1].cpu().detach().numpy()))
+                    graphs[i].to('cpu')
         elif self.feature_type == 'graph_based':
             if not mask:
                 for i in tqdm(range(len(graphs)), desc='Compute metrics', disable=self.disable_printing):
                     if phase=='training':
-                        graphs[i] = graphs[i].to(self.device)
-                        p = F.softmax(self.model(graphs[i]),
-                                      dim=0).detach().to('cpu').numpy()
+                        p = F.softmax(self.model(graphs[i].to(self.device)),
+                                      dim=0).cpu().detach().numpy()
                         y_pred = np.argmax(p, axis=1)
-                        y_true = graphs[i].y.detach().to('cpu')
+                        y_true = graphs[i].y.cpu().detach()
                     elif phase=='scoring':
-                        graphs[i] = graphs[i].to(self.device)
-                        p = F.softmax(self.model(graphs[i])[-1],
-                                      dim=0).detach().to('cpu').numpy()
+                        p = F.softmax(self.model(graphs[i].to(self.device))[-1],
+                                      dim=0).cpu().detach().numpy()
                         y_pred.append(np.argmax(p))
-                        y_true.append(graphs[i].y[-1].detach().to('cpu'))
+                        y_true.append(graphs[i].y[-1].cpu().detach())
                     else:
                         raise Exception('No such phase!')
-                    graphs[i] = graphs[i].to('cpu')
+                    graphs[i].to('cpu')
             else:
                 for i in tqdm(range(len(graphs)), desc='Compute metrics', disable=self.disable_printing):
                     if phase=='training':
-                        graphs[i] = graphs[i].to(self.device)
-                        p = F.softmax(self.model(graphs[i]),
+                        p = F.softmax(self.model(graphs[i].to(self.device)),
                                       dim=0)
-                        p = p[graphs[i].mask].detach().to('cpu').numpy()
+                        p = p[graphs[i].mask].cpu().detach().numpy()
                         y_pred = np.argmax(p, axis=1)
-                        y_true = graphs[i].y.detach().to('cpu')
+                        y_true = graphs[i].y.cpu().detach()
                     elif phase=='scoring':
-                        graphs[i] = graphs[i].to(self.device)
-                        p = F.softmax(self.model(graphs[i])[-1],
-                                      dim=0).detach().to('cpu').numpy()
+                        p = F.softmax(self.model(graphs[i].to(self.device))[-1],
+                                      dim=0).cpu().detach().numpy()
                         y_pred.append(np.argmax(p))
-                        y_true.append(graphs[i].y[-1].detach().to('cpu'))
+                        y_true.append(graphs[i].y[-1].cpu().detach())
                     else:
                         raise Exception('No such phase!')
-                    graphs[i] = graphs[i].to('cpu')
+                    graphs[i].to('cpu')
         else:
             raise Exception('Trainer is not implemented for such feature type name while calculating training scores!')
 
-        gc.collect()
-        torch.cuda.empty_cache()
         return y_true, y_pred
 
     def evaluation(self, i, mask=False):
-        gc.collect()
-        torch.cuda.empty_cache()
-        
         self.model.eval()
 
         y_true, y_pred = self.compute_metrics_cross_entropy(self.data.array_of_graphs_for_validation, mask=mask, phase='scoring')
@@ -1096,13 +1132,8 @@ class Trainer:
             self.patience_counter += 1
             if not self.disable_printing:
                 print(f'Metric was not improved for the {self.patience_counter}th time')
-                
-        gc.collect()
-        torch.cuda.empty_cache()
 
     def test(self, plot_cm=False, mask=False):
-        gc.collect()
-        torch.cuda.empty_cache()
         self.model = self.model_cls(self.data.array_of_graphs_for_training[0]).to(self.device)
         self.model.load_state_dict(torch.load(self.log_dir + '/model_best.bin'))
         self.model.eval()
@@ -1145,7 +1176,7 @@ class Trainer:
             gc.collect() # Python thing
             torch.cuda.empty_cache() # PyTorch thing
         else:
-            self.model = self.model.eval().to('cpu')
+            self.model = self.model.eval().cpu()
 
         return {'f1_macro': f1_macro_score, 'f1_weighted': f1_weighted_score, 'accuracy':acc, 'class_scores': f1_macro_score_per_class, 'skipped_nodes': len(self.data.test_nodes) - len(self.data.array_of_graphs_for_testing), 'gpu_memory': self.gpumem}
         
@@ -1186,17 +1217,17 @@ class Trainer:
 
                     pbar = tqdm(range(len(selector)), desc='Training samples', disable=self.disable_printing)
                     pbar.set_postfix({'val_best_score': self.max_f1_score_macro})
-                    for j in pbar:
+                    for j, data_curr in enumerate(pbar):
                         n = selector[j]
+                        data_curr = self.data.array_of_graphs_for_training[n].to(self.device)
                         optimizer.zero_grad()
-                        self.data.array_of_graphs_for_training[n] = self.data.array_of_graphs_for_training[n].to(self.device)
-                        out = self.model(self.data.array_of_graphs_for_training[n])
-                        loss = criterion(out[-1], self.data.array_of_graphs_for_training[n].y[-1])
+                        out = self.model(data_curr)
+                        loss = criterion(out[-1], data_curr.y[-1])
                         loss.backward()
-                        mean_epoch_loss.append(loss.detach().to('cpu').numpy())
+                        mean_epoch_loss.append(loss.detach().cpu().numpy())
                         optimizer.step()
                         scheduler.step()
-                        self.data.array_of_graphs_for_training[n] = self.data.array_of_graphs_for_training[n].to('cpu')
+                        self.data.array_of_graphs_for_training[n].to('cpu')
                         
                     if not self.disable_printing:
                         print(f'Mean loss: {np.mean(mean_epoch_loss)}')
@@ -1209,7 +1240,7 @@ class Trainer:
                     
             elif self.feature_type == 'graph_based':
                 if self.masking:
-                    self.data.array_of_graphs_for_training[0] = self.data.array_of_graphs_for_training[0].to(self.device)
+                    data_curr = self.data.array_of_graphs_for_training[0].to(self.device)
                     self.model.train()
                     for i in tqdm(range(self.train_iterations_per_sample), desc='Training iterations', disable=self.disable_printing):
                         if self.patience_counter == self.patience:
@@ -1221,19 +1252,19 @@ class Trainer:
                                 print('Training report')
                                 print(classification_report(y_true, y_pred))
 
-                            self.data.array_of_graphs_for_training[0] = self.data.array_of_graphs_for_training[0].to('cpu')
+                            self.data.array_of_graphs_for_training[0].to('cpu')
                             self.evaluation(i, mask=True)
                             self.model.train()
-                            self.data.array_of_graphs_for_training[0] = self.data.array_of_graphs_for_training[0].to(self.device)
+                            self.data.array_of_graphs_for_training[0].to(self.device)
 
                         optimizer.zero_grad()
-                        out = self.model(self.data.array_of_graphs_for_training[0])
-                        loss = criterion(out[self.data.array_of_graphs_for_training[0].mask], self.data.array_of_graphs_for_training[0].y[self.data.array_of_graphs_for_training[0].mask])
+                        out = self.model(data_curr)
+                        loss = criterion(out[data_curr.mask], data_curr.y[data_curr.mask])
                         loss.backward()
                         optimizer.step()
                         scheduler.step()
                 else:
-                    self.data.array_of_graphs_for_training[0] = self.data.array_of_graphs_for_training[0].to(self.device)
+                    data_curr = self.data.array_of_graphs_for_training[0].to(self.device)
                     self.model.train()
                     for i in tqdm(range(self.train_iterations_per_sample), desc='Training iterations', disable=self.disable_printing):
                         if self.patience_counter == self.patience:
@@ -1245,14 +1276,14 @@ class Trainer:
                                 print('Training report')
                                 print(classification_report(y_true, y_pred))
 
-                            self.data.array_of_graphs_for_training[0] = self.data.array_of_graphs_for_training[0].to('cpu')
+                            self.data.array_of_graphs_for_training[0].to('cpu')
                             self.evaluation(i)
                             self.model.train()
-                            self.data.array_of_graphs_for_training[0] = self.data.array_of_graphs_for_training[0].to(self.device)
+                            self.data.array_of_graphs_for_training[0].to(self.device)
 
                         optimizer.zero_grad()
-                        out = self.model(self.data.array_of_graphs_for_training[0])
-                        loss = criterion(out, self.data.array_of_graphs_for_training[0].y)
+                        out = self.model(data_curr)
+                        loss = criterion(out, data_curr.y)
                         loss.backward()
                         optimizer.step()
                         scheduler.step()
@@ -1266,11 +1297,14 @@ class Trainer:
 
 
 def independent_test(model_path, model_cls, df, vertex_id, gpu_id, test_type, mask_nodes=None):
-    
+
     dp = DataProcessor(df.copy(), is_path_object=True)
     dp.classes.remove('unknown')
     unique_nodes = list(pd.concat([df['node_id1'], df['node_id2']], axis=0).unique())
-    unique_nodes.remove(f'node_{vertex_id}')
+    if f'node_{vertex_id}' in unique_nodes:
+        unique_nodes.remove(f'node_{vertex_id}')
+    else:
+        raise Exception('Test node not in DataFrame!')
     train_split = np.array(list(map(lambda x: int(x[5:]), unique_nodes)))
     valid_split = np.array([vertex_id])
     test_split = np.array([vertex_id])
@@ -1281,6 +1315,8 @@ def independent_test(model_path, model_cls, df, vertex_id, gpu_id, test_type, ma
         test_split = np.array(list(filter(lambda node: node not in mask_data, test_split)))
     
     dp.load_train_valid_test_nodes(train_split, valid_split, test_split, 'numpy', mask_path=mask_nodes)
+    
+    # what if some vertex_id node can't be attached to train graph? Add handling of this behavior
     
     if test_type == 'one_hot':        
         dp.make_train_valid_test_datasets_with_numba('one_hot', 'homogeneous', 'multiple', 'multiple', 'debug_debug', skip_train_val=True)
@@ -1295,7 +1331,7 @@ def independent_test(model_path, model_cls, df, vertex_id, gpu_id, test_type, ma
     model.load_state_dict(torch.load(model_path))
     model.eval()
     
-    p = F.softmax(model(dp.array_of_graphs_for_testing[0].to(device))[-1], dim=0).detach().to('cpu').numpy()
+    p = F.softmax(model(dp.array_of_graphs_for_testing[0].to(device))[-1], dim=0).cpu().detach().numpy()
     dp.array_of_graphs_for_testing[0].to('cpu')
     return dp.classes[np.argmax(p)]
     
