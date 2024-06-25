@@ -17,11 +17,14 @@ from collections import OrderedDict
 import numba
 from numba import njit, prange
 import matplotlib.pyplot as plt
+import matplotlib.cm as mcm
 import torch.nn.functional as F
 from scipy.spatial.distance import squareform
 from torch.utils.data import TensorDataset, DataLoader
 from scipy.cluster.hierarchy import dendrogram, linkage
 from sklearn.metrics import f1_score, accuracy_score
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import reverse_cuthill_mckee
 from sklearn.model_selection import KFold
 from torch.optim.lr_scheduler import StepLR
 from torch_geometric.loader import DataLoader
@@ -30,7 +33,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.semi_supervised import LabelPropagation
 from sklearn.neighbors import KNeighborsClassifier
-from scipy.stats import bernoulli, expon, norm
+from scipy.stats import bernoulli, expon, norm, powerlaw, pearsonr
 from sklearn.model_selection import train_test_split
 from torch_geometric.utils.convert import from_networkx
 from torch_geometric.data import InMemoryDataset, Data
@@ -170,6 +173,7 @@ class DataProcessor:
         self.classes: list[str] = self.get_classes(self.df)
         self.node_classes_sorted: pd.DataFrame = self.get_node_classes(self.df)
         self.class_to_int_mapping: dict[int, str] = {i:n for i, n in enumerate(self.classes)}
+        self.class_colors = self.get_class_colors()
         self.nx_graph = self.make_networkx_graph() # line order matters because self.df is modified in above functions
         self.train_nodes = None
         self.valid_nodes = None
@@ -181,6 +185,11 @@ class DataProcessor:
         self.disable_printing = disable_printing
         # self.rng = np.random.default_rng(42)
         
+    def get_class_colors(self):
+        colors = ['#00ff72', '#004eff', '#a900ff', '#ff002f', '#ffc800', '#00ffff', '#6f6f6f', '#ff9900']
+        assert len(self.classes) <= len(colors)
+        return {self.classes[i]:colors[i] for i in range(len(self.classes))}
+    
     def make_networkx_graph(self):
         G = nx.from_pandas_edgelist(self.df, source='node_id1', target='node_id2', edge_attr='ibd_sum')
         node_attr = dict()
@@ -315,8 +324,9 @@ class DataProcessor:
                         if not self.disable_printing:
                             print('Removing mask node from test nodes')
                         self.mask_nodes.remove(node)
-                        
-            assert len(self.mask_nodes) > 0
+            
+            if self.mask_nodes is not None:
+                assert len(self.mask_nodes) > 0
             assert len(set(self.train_nodes) & set(self.mask_nodes)) == 0
             assert len(self.train_nodes) > 0
             assert len(self.valid_nodes) > 0
@@ -349,8 +359,64 @@ class DataProcessor:
             if c.iloc[i] > 1:
                 counter += 1
         return counter
+    
+    def addlabels(self, ax, x, y, t):
+        for i in range(len(x)):
+            ax.text(i, y[i] + 2 if t == 0 else y[i] + 20, y[i], ha = 'center', fontsize=8)
             
-    def get_graph_features(self, fig_path, fig_size, picture_only=False):
+    def get_graph_features(self, fig_path, fig_size, picture_only=False, dataset_name=None):
+        
+        graph_node_classes = nx.get_node_attributes(self.nx_graph, 'class')
+        class_counts = dict()
+        for k, v in graph_node_classes.items():
+            if self.class_to_int_mapping[v] not in class_counts.keys():
+                class_counts[self.class_to_int_mapping[v]] = 1
+            else:
+                class_counts[self.class_to_int_mapping[v]] += 1
+                
+        fig, ax = plt.subplots(figsize=(6, 6))
+        ax.bar(range(len(class_counts.keys())), list(class_counts.values()), color='#253957')
+        ax.set_xticks(range(len(class_counts.keys())))
+        ax.set_xticklabels(class_counts.keys(), rotation = 90, ha='right')
+        self.addlabels(ax, list(class_counts.keys()), list(class_counts.values()), 0)
+        ax.set_title(f'Class distribution ({dataset_name})')
+        ax.set_xlabel(f'Population groups')
+        ax.set_ylabel(f'Amount of nodes')
+        plt.savefig(f'{fig_path}num_nodes_per_classes_and_dataset.pdf', bbox_inches='tight')
+        plt.show()
+        
+        ##########
+        
+        def smallest_degree(G):
+            return min(G, key=G.degree)
+        
+        # rcm = list(nx.utils.reverse_cuthill_mckee_ordering(self.nx_graph, heuristic=smallest_degree))
+        rcm = list(nx.utils.cuthill_mckee_ordering(self.nx_graph, heuristic=None))
+        
+        B = nx.adjacency_matrix(self.nx_graph, nodelist=rcm)
+        img, ax = plt.subplots(1, 1, figsize=(12, 12))
+        pic = sns.heatmap(B.todense(), cbar=False, square=True, linewidths=0, annot=False, cmap=mcm.gray, ax=ax)
+        pic.set(xticklabels=[], yticklabels=[])
+        ax.tick_params(left=False, bottom=False)
+        ax.set_title(f'Cuthill-McKee adjacency matrix ({dataset_name})')
+        plt.savefig(f'{fig_path}adjacency_matrix.png', bbox_inches='tight') # pdf is too heavy
+        plt.show()
+        
+        ##########
+        
+        rcm = list(nx.utils.cuthill_mckee_ordering(self.nx_graph, heuristic=smallest_degree))
+        
+        B = nx.adjacency_matrix(self.nx_graph, nodelist=rcm)
+        img, ax = plt.subplots(1, 1, figsize=(12, 12))
+        pic = sns.heatmap(B.todense(), cbar=False, square=True, linewidths=0, annot=False, cmap=mcm.gray, ax=ax)
+        pic.set(xticklabels=[], yticklabels=[])
+        ax.tick_params(left=False, bottom=False)
+        ax.set_title(f'Cuthill-McKee adjacency matrix by smallest degree ({dataset_name})')
+        plt.savefig(f'{fig_path}adjacency_matrix_smallest_degree.png', bbox_inches='tight') # pdf is too heavy
+        plt.show()
+        
+        ##########
+        
         features = dict()
         
         G = self.nx_graph
@@ -392,7 +458,8 @@ class DataProcessor:
             features['Is Eulerian'] = nx.is_eulerian(G)
             features['Is semi-Eulerian'] = nx.is_semieulerian(G)
             features['Is regular'] = nx.is_regular(G)
-            features['Average shortest path length'] = nx.average_shortest_path_length(G) # try weighted too
+            features['Average shortest path length'] = nx.average_shortest_path_length(G)
+            features['Weighted average shortest path length'] = nx.average_shortest_path_length(G, weight='ibd_sum')
             features['Is tree'] = nx.is_tree(G)
             features['Is forest'] = nx.is_forest(G)
             
@@ -436,31 +503,124 @@ class DataProcessor:
             features['Mean betweenness centrality'] = np.mean(cba)
             features['Min betweenness centrality'] = np.min(cba)
             
-#             ck = nx.katz_centrality(G) # use katz_centrality_numpy
-#             cka = []
-#             for i in range(G.number_of_nodes()):
-#                 cka.append(ck[f'{i}'])
+            ck = nx.katz_centrality_numpy(G)
+            cka = []
+            for i in range(G.number_of_nodes()):
+                cka.append(ck[f'{i}'])
 
-#             cka = np.array(cka)
-#             features['Max katz centrality'] = np.max(cka)
-#             features['Mean katz centrality'] = np.mean(cka)
-#             features['Min katz centrality'] = np.min(cka)
+            cka = np.array(cka)
+            features['Max katz centrality'] = np.max(cka)
+            features['Mean katz centrality'] = np.mean(cka)
+            features['Min katz centrality'] = np.min(cka)
+            
+            communities_per_class_dict = dict()
+            nx_graph_node_classes = nx.get_node_attributes(G, 'class')
+            for node, node_class in nx_graph_node_classes.items():
+                if node_class not in communities_per_class_dict.keys():
+                    communities_per_class_dict[node_class] = set([node])
+                else:
+                    communities_per_class_dict[node_class].add(node)
+                    
+            features['class_partition_modularity'] = nx.community.modularity(G, list(communities_per_class_dict.values()))
+            features['Max largest clique'] = max(nx.find_cliques(G), key=len)
 
-            features['PageRank'] = nx.pagerank(G, alpha=0.8)
+            # features['PageRank'] = nx.pagerank(G, alpha=0.8)
         
         cc = []
         for i in range(G.number_of_nodes()):
             cc.append(nx.clustering(G,f'{i}'))
+        
+        ##########
+        G_max_clique = G.subgraph(features['Max largest clique'])
+        pos = nx.spring_layout(G_max_clique, iterations=10)
+        plt.clf()
+        fig, ax = plt.subplots(1, 1, figsize=fig_size)
+        ax.axis('off')
+        plt.title(f'Max largest clique ({dataset_name})')
+
+        node_classes = nx.get_node_attributes(G_max_clique, "class")
+        unique_node_classes = np.unique(list(node_classes.values())).astype(int)
+        unique_node_classes = np.array([self.class_to_int_mapping[c] for c in unique_node_classes])
+        current_node_colors = []
+        for node in G_max_clique.nodes:
+            current_node_colors.append(self.class_colors[self.class_to_int_mapping[node_classes[node]]])
+        nx.draw_networkx_nodes(G_max_clique, pos=pos, node_color=current_node_colors, node_size=24, ax=ax)
+
+        nx.draw_networkx_edges(G_max_clique, pos=pos, alpha=0.15, width=1, edge_cmap=plt.cm.Greys, edge_color=list(nx.get_edge_attributes(G_max_clique, 'ibd_sum').values()), ax=ax)
+
+        for k, v in self.class_colors.items():
+            if k in unique_node_classes:
+                plt.scatter([],[], c=v, label=k)
+
+        plt.legend()
+
+        plt.savefig(f'{fig_path}largest_clique.pdf')
+        plt.show()
+        
+        ##########
+        
+        spl = []
+        splw = []
+        spl_dict = dict(nx.shortest_path_length(G))
+        splw_dict = dict(nx.shortest_path_length(G, weight='ibd_sum'))
+        for source in G.nodes:
+            for target in G.nodes:
+                spl_curr = spl_dict[source][target]
+                splw_curr = splw_dict[source][target]
+                if spl_curr:
+                    spl.append(spl_curr)
+                if splw_curr:
+                    splw.append(splw_curr)
+        
+        plt.clf()
+        img, ax = plt.subplots(1, 1, figsize=fig_size)
+        ax.set_title(f'Distribution of shortest paths ({dataset_name})')
+        n, bins, patches = ax.hist(spl, bins=100, color='#253957', edgecolor='white', linewidth=1.2, density=False)
+
+        ax.set_xlabel('Path length')
+        ax.set_ylabel('Amount of paths')
+        plt.savefig(f'{fig_path}shortest_path_dist.pdf', bbox_inches="tight")
+        plt.show()
+        
+        plt.clf()
+        img, ax = plt.subplots(1, 1, figsize=fig_size)
+        ax.set_title(f'Distribution of weighted shortest paths ({dataset_name})')
+        n, bins, patches = ax.hist(splw, bins=100, color='#253957', edgecolor='white', linewidth=1.2, density=False)
+
+        ax.set_xlabel('Path length')
+        ax.set_ylabel('Amount of weighted paths')
+        plt.savefig(f'{fig_path}weighted_shortest_path_dist.pdf', bbox_inches="tight")
+        plt.show()
+        
+        ##########
+        
+        all_centralities = [cda, cea, ccla, cba, cka]
+
+        centrality_correlation = np.zeros((len(all_centralities), len(all_centralities)))
+        for i in range(len(all_centralities)):
+            for j in range(len(all_centralities)):
+                centrality_correlation[i, j] = pearsonr(all_centralities[i], all_centralities[j])[0]
+
+        plt.clf()
+        plt.title(f'Centrality correlation ({dataset_name})')
+        centralities = ['degree', 'eigenvector', 'closeness', 'betweenness', 'katz']
+        sns.heatmap(centrality_correlation, xticklabels=centralities, yticklabels=centralities, annot=True, fmt=".2f", linewidths=.5, cmap=sns.color_palette("ch:s=.25,rot=-.25", as_cmap=True))
+        plt.xticks(rotation=90)
+        plt.savefig(f'{fig_path}centralities_correlation.pdf', bbox_inches="tight")
+        plt.show()
+            
+        ##########
             
         plt.clf()
         img, ax = plt.subplots(1, 1, figsize=fig_size)
-        ax.set_title('Distribution of clustering coefficient')
-        n, bins, patches = ax.hist(cc, bins=100, color='#69b3a2', edgecolor='white', linewidth=1.2)
+        ax.set_title(f'Distribution of clustering coefficient ({dataset_name})')
+        n, bins, patches = ax.hist(cc, bins=100, color='#253957', edgecolor='white', linewidth=1.2)
         ax.set_xlabel('Clustering coefficient')
         ax.set_ylabel('Number of nodes')
         plt.savefig(f'{fig_path}clustering_dist.pdf', bbox_inches="tight")
         plt.show()
         
+        ##########
         
         plt.clf()
         img, ax = plt.subplots(1, 1, figsize=fig_size)
@@ -468,21 +628,79 @@ class DataProcessor:
         (mu, sigma) = norm.fit(degrees_of_G)
 
         # the histogram of the data
-        n, bins, patches = ax.hist(degrees_of_G, bins=100, density=True, label='observed', color='#69b3a2', edgecolor='white', linewidth=1.2)
+        n, bins, patches = ax.hist(degrees_of_G, bins=100, density=True, label='observed', color='#253957', edgecolor='white', linewidth=1.2)
 
         # add a 'best fit' line
         y = norm.pdf(bins, mu, sigma)
-        l = ax.plot(bins, y, 'r--', linewidth=2, label='approximation')
+        l = ax.plot(bins, y, 'r--', linewidth=2, label='normal approximation')
+        
+        scipy_hat_alpha, scipy_loc, scipy_scale = powerlaw.fit(degrees_of_G)
+        y = powerlaw.pdf(bins, scipy_hat_alpha, round(scipy_loc), scipy_scale)
+        l = ax.plot(bins[1:], y[1:], '--', linewidth=2, label='powerlaw approximation', color='lime')
 
         #plot
         ax.set_xlabel('Degree of node')
         ax.set_ylabel('Probability of degree')
-        plt.title(r'$\mathrm{Histogram\ of\ degree\ dist:}\ \mu=%.3f,\ \sigma=%.3f$' %(mu, sigma))
+        plt.title(f'Histogram of degree dist ({dataset_name}): ' + r'$\mu=%.1f,\ \sigma=%.1f,\ \alpha=%.1f,\ loc=%.1f,\ scale=%.1f$' %(mu, sigma, scipy_hat_alpha, scipy_loc, scipy_scale))
         # plt.grid(True)
         ax.legend(fontsize="10")
         plt.savefig(f'{fig_path}deg_dist_approx.pdf', bbox_inches="tight")
 
         plt.show()
+        
+        ##########
+        
+        nn = self.nx_graph.number_of_nodes()
+        i = 2
+        while 1:
+            kG=nx.k_core(G,k=i)
+            if kG.number_of_nodes() == 0:
+                break
+            i += 1
+        i -= 1
+        kG=nx.k_core(G,k=i)
+        pos = nx.spring_layout(kG,iterations=10)
+        plt.clf()
+        fig, ax = plt.subplots(1, 1, figsize=(12, 12))
+        ax.axis('off')
+        plt.title(f'k: {i}, number of nodes: {kG.number_of_nodes()} ({dataset_name})')
+
+        node_classes = nx.get_node_attributes(kG, "class")
+        unique_node_classes = np.unique(list(node_classes.values())).astype(int)
+        unique_node_classes = np.array([self.class_to_int_mapping[c] for c in unique_node_classes])
+        current_node_colors = []
+        for node in kG.nodes:
+            current_node_colors.append(self.class_colors[self.class_to_int_mapping[node_classes[node]]])
+        nx.draw_networkx_nodes(kG, pos=pos, node_color=current_node_colors, node_size=24, ax=ax)
+
+        nx.draw_networkx_edges(kG, pos=pos, alpha=0.35, width=1, edge_cmap=plt.cm.Greys, edge_color=list(nx.get_edge_attributes(kG, 'ibd_sum').values()), ax=ax)
+
+        for k, v in self.class_colors.items():
+            if k in unique_node_classes:
+                plt.scatter([],[], c=v, label=k)
+
+        plt.legend()
+
+        plt.savefig(f'{fig_path}k_core_{i}.pdf', bbox_inches="tight")
+        plt.show()
+        
+        ##########
+        
+        simrank_similarity = nx.simrank_similarity(self.nx_graph)
+        simrank_similarity_matrix = np.empty((len(self.nx_graph), len(self.nx_graph)))
+        for source in self.nx_graph.nodes:
+            for target in self.nx_graph.nodes:
+                simrank_similarity_matrix[source, target] = simrank_similarity[source][target]
+
+        plt.clf()
+        img, ax = plt.subplots(1, 1, figsize=(12, 12))
+        plt.title(f'Simrank similarity ({dataset_name})')
+        sns.heatmap(simrank_similarity_matrix, cmap=sns.color_palette("ch:s=.25,rot=-.25", as_cmap=True), ax=ax)
+        plt.xticks(rotation=90)
+        plt.savefig(f'{fig_path}simrank_similarity.png', bbox_inches="tight")
+        plt.show()
+        
+        ##########
         
         return features
             #####################################################################################################################################################################################################
@@ -874,17 +1092,21 @@ class DataProcessor:
                     num_nodes_class_1 = len(df_new.iloc[:, 1][df_new.iloc[:, 1] == i].to_numpy())
                     num_nodes_class_2 = len(df_new.iloc[:, 1][df_new.iloc[:, 1] == j].to_numpy())
                     all_possible_connections = num_nodes_class_1 * num_nodes_class_2
-                self.edge_probs[i, j] = real_connections / all_possible_connections
+                if real_connections == 0:
+                    self.edge_probs[i, j] = np.nan
+                else:
+                    self.edge_probs[i, j] = real_connections / all_possible_connections
                 
-    def plot_simulated_probs(self, save_path=None):
-        fig, ax = plt.subplots()
-        sns.heatmap(self.edge_probs, xticklabels=self.classes, yticklabels=self.classes, annot=True, fmt='.3f', cmap=sns.color_palette("ch:start=.1,rot=-.8", as_cmap=True), ax=ax)
-        ax.set_title('Edge probabilities', fontweight='bold', loc='center')
+                
+    def plot_simulated_probs(self, save_path=None, dataset_name=None):
+        fig, ax = plt.subplots(figsize=(10, 10))
+        sns.heatmap(self.edge_probs, xticklabels=self.classes, yticklabels=self.classes, annot=True, fmt='.4f', cmap=sns.color_palette("ch:s=.25,rot=-.25", as_cmap=True), ax=ax)
+        ax.set_title(f'Edge probabilities ({dataset_name})', loc='center') # fontweight='bold'
         for i, tick_label in enumerate(ax.axes.get_yticklabels()):
-            tick_label.set_color("#008668")
+            # tick_label.set_color("#008668")
             tick_label.set_fontsize("10")
         for i, tick_label in enumerate(ax.axes.get_xticklabels()):
-            tick_label.set_color("#008668")
+            # tick_label.set_color("#008668")
             tick_label.set_fontsize("10")
         if save_path is not None:
             plt.savefig(save_path)
