@@ -327,7 +327,7 @@ class DataProcessor:
             
             if self.mask_nodes is not None:
                 assert len(self.mask_nodes) > 0
-            assert len(set(self.train_nodes) & set(self.mask_nodes)) == 0
+                assert len(set(self.train_nodes) & set(self.mask_nodes)) == 0
             assert len(self.train_nodes) > 0
             assert len(self.valid_nodes) > 0
             assert len(self.test_nodes) > 0
