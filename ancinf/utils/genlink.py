@@ -1,5 +1,6 @@
 import gc
 import os
+import json
 import time
 import torch
 import pickle
@@ -50,6 +51,16 @@ from sklearn.neighbors import KNeighborsClassifier
 from torch.nn import Linear, LayerNorm, BatchNorm1d, Sequential, LeakyReLU, Dropout
 from torch_geometric.nn import GCNConv, GATConv, TransformerConv, NNConv, SGConv, ARMAConv, TAGConv, ChebConv, DNAConv, LabelPropagation, \
 EdgeConv, FiLMConv, FastRGCNConv, SSGConv, SAGEConv, GATv2Conv, BatchNorm, GraphNorm, MemPooling, SAGPooling, GINConv, CorrectAndSmooth
+
+class NpEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super(NpEncoder, self).default(obj)
 
 
 def symmetrize(m):
@@ -390,16 +401,30 @@ class DataProcessor:
         def smallest_degree(G):
             return min(G, key=G.degree)
         
-        # rcm = list(nx.utils.reverse_cuthill_mckee_ordering(self.nx_graph, heuristic=smallest_degree))
         rcm = list(nx.utils.cuthill_mckee_ordering(self.nx_graph, heuristic=None))
         
         B = nx.adjacency_matrix(self.nx_graph, nodelist=rcm)
-        img, ax = plt.subplots(1, 1, figsize=(12, 12))
+        img, ax = plt.subplots(1, 1, figsize=(20, 20))
         pic = sns.heatmap(B.todense(), cbar=False, square=True, linewidths=0, annot=False, cmap=mcm.gray, ax=ax)
-        pic.set(xticklabels=[], yticklabels=[])
-        ax.tick_params(left=False, bottom=False)
+        
+        node_classes = nx.get_node_attributes(self.nx_graph, "class")
+        
+        ax.set_xticks(range(len(rcm)))
+        ax.set_xticklabels([f'{self.class_to_int_mapping[node_classes[node]]} ({node})' for node in rcm], fontsize=2)
+        colors = [self.class_colors[self.class_to_int_mapping[node_classes[node]]] for node in rcm]
+        for xtick, color in zip(ax.get_xticklabels(), colors):
+            xtick.set_color(color)
+            
+        ax.set_yticks(range(len(rcm)))
+        ax.set_yticklabels([f'{self.class_to_int_mapping[node_classes[node]]} ({node})' for node in rcm], fontsize=2)
+        colors = [self.class_colors[self.class_to_int_mapping[node_classes[node]]] for node in rcm]
+        for ytick, color in zip(ax.get_yticklabels(), colors):
+            ytick.set_color(color)
+            
+        # pic.set(xticklabels=[], yticklabels=[])
+        # ax.tick_params(left=False, bottom=False)
         ax.set_title(f'Cuthill-McKee adjacency matrix ({dataset_name})')
-        plt.savefig(f'{fig_path}adjacency_matrix.png', bbox_inches='tight') # pdf is too heavy
+        plt.savefig(f'{fig_path}adjacency_matrix.png', bbox_inches='tight', dpi=400) # pdf is too heavy
         plt.show()
         
         ##########
@@ -407,12 +432,25 @@ class DataProcessor:
         rcm = list(nx.utils.cuthill_mckee_ordering(self.nx_graph, heuristic=smallest_degree))
         
         B = nx.adjacency_matrix(self.nx_graph, nodelist=rcm)
-        img, ax = plt.subplots(1, 1, figsize=(12, 12))
+        img, ax = plt.subplots(1, 1, figsize=(20, 20))
         pic = sns.heatmap(B.todense(), cbar=False, square=True, linewidths=0, annot=False, cmap=mcm.gray, ax=ax)
-        pic.set(xticklabels=[], yticklabels=[])
-        ax.tick_params(left=False, bottom=False)
+        
+        node_classes = nx.get_node_attributes(self.nx_graph, "class")
+        
+        ax.set_xticks(range(len(rcm)))
+        ax.set_xticklabels([f'{self.class_to_int_mapping[node_classes[node]]} ({node})' for node in rcm], fontsize=2)
+        colors = [self.class_colors[self.class_to_int_mapping[node_classes[node]]] for node in rcm]
+        for xtick, color in zip(ax.get_xticklabels(), colors):
+            xtick.set_color(color)
+            
+        ax.set_yticks(range(len(rcm)))
+        ax.set_yticklabels([f'{self.class_to_int_mapping[node_classes[node]]} ({node})' for node in rcm], fontsize=2)
+        colors = [self.class_colors[self.class_to_int_mapping[node_classes[node]]] for node in rcm]
+        for ytick, color in zip(ax.get_yticklabels(), colors):
+            ytick.set_color(color)
+  
         ax.set_title(f'Cuthill-McKee adjacency matrix by smallest degree ({dataset_name})')
-        plt.savefig(f'{fig_path}adjacency_matrix_smallest_degree.png', bbox_inches='tight') # pdf is too heavy
+        plt.savefig(f'{fig_path}adjacency_matrix_smallest_degree.png', bbox_inches='tight', dpi=400) # pdf is too heavy
         plt.show()
         
         ##########
@@ -434,8 +472,8 @@ class DataProcessor:
 
             if features['Number of cc'] > 1:
                 G = G.subgraph(max(nx.connected_components(G))).copy()
-                mapping = {on:f'{nn}' for nn, on in enumerate(G.nodes())}
-                G = nx.relabel_nodes(G, mapping)
+                # mapping = {on:f'{nn}' for nn, on in enumerate(G.nodes())}
+                # G = nx.relabel_nodes(G, mapping)
                 features['Number of nodes in largest cc'] = G.number_of_nodes()
 
             features['Diameter'] = nx.diameter(G)
@@ -465,8 +503,8 @@ class DataProcessor:
             
             cd = nx.degree_centrality(G)
             cda = []
-            for i in range(G.number_of_nodes()):
-                cda.append(cd[f'{i}'])
+            for node in G.nodes:
+                cda.append(cd[node])
 
             cda = np.array(cda)
             features['Max degree centrality'] = np.max(cda)
@@ -475,8 +513,8 @@ class DataProcessor:
             
             ce = nx.eigenvector_centrality(G)
             cea = []
-            for i in range(G.number_of_nodes()):
-                cea.append(ce[f'{i}'])
+            for node in G.nodes:
+                cea.append(ce[node])
 
             cea = np.array(cea)
             features['Max eigenvector centrality'] = np.max(cea)
@@ -485,8 +523,8 @@ class DataProcessor:
             
             ccl = nx.closeness_centrality(G)
             ccla = []
-            for i in range(G.number_of_nodes()):
-                ccla.append(ccl[f'{i}'])
+            for node in G.nodes:
+                ccla.append(ccl[node])
 
             ccla = np.array(ccla)
             features['Max closeness centrality'] = np.max(ccla)
@@ -495,8 +533,8 @@ class DataProcessor:
             
             cb = nx.betweenness_centrality(G)
             cba = []
-            for i in range(G.number_of_nodes()):
-                cba.append(cb[f'{i}'])
+            for node in G.nodes:
+                cba.append(cb[node])
 
             cba = np.array(cba)
             features['Max betweenness centrality'] = np.max(cba)
@@ -505,8 +543,8 @@ class DataProcessor:
             
             ck = nx.katz_centrality_numpy(G)
             cka = []
-            for i in range(G.number_of_nodes()):
-                cka.append(ck[f'{i}'])
+            for node in G.nodes:
+                cka.append(ck[node])
 
             cka = np.array(cka)
             features['Max katz centrality'] = np.max(cka)
@@ -523,12 +561,67 @@ class DataProcessor:
                     
             features['class_partition_modularity'] = nx.community.modularity(G, list(communities_per_class_dict.values()))
             features['Max largest clique'] = max(nx.find_cliques(G), key=len)
+            
+            features['Center_node_description'] = dict()
+            features['Periphery_node_description'] = dict()
+            features['Max_degree_centrality_node'] = dict()
+            features['Max_eigenvector_centrality_node'] = dict()
+            features['Max_closeness_centrality_node'] = dict()
+            features['Max_betweenness_centrality_node'] = dict()
+            features['Max_katz_centrality_node'] = dict()
+
+            node_classes = nx.get_node_attributes(G, "class")
+            for node in features['Center']:
+                features['Center_node_description'][str(node)] = [self.class_to_int_mapping[node_classes[node]], f'degree: {G.degree[node]}', f'degree centrality: {cd[node]}', f'eigenvector centrality: {ce[node]}', f'closeness centrality: {ccl[node]}', f'betweenness centrality: {cb[node]}', f'katz centrality: {ck[node]}']
+                
+            for node in features['Periphery']:
+                features['Periphery_node_description'][str(node)] = [self.class_to_int_mapping[node_classes[node]], f'degree: {G.degree[node]}', f'degree centrality: {cd[node]}', f'eigenvector centrality: {ce[node]}', f'closeness centrality: {ccl[node]}', f'betweenness centrality: {cb[node]}', f'katz centrality: {ck[node]}']
+            
+            max_centrality = -np.inf
+            selected_node = None
+            for node, centrality in cd.items():
+                if centrality > max_centrality:
+                    max_centrality = centrality
+                    selected_node = node
+            features['Max_degree_centrality_node'][str(selected_node)] = [self.class_to_int_mapping[node_classes[selected_node]], f'degree: {G.degree[selected_node]}', f'degree centrality: {cd[selected_node]}', f'eigenvector centrality: {ce[selected_node]}', f'closeness centrality: {ccl[selected_node]}', f'betweenness centrality: {cb[selected_node]}', f'katz centrality: {ck[selected_node]}']
+            
+            max_centrality = -np.inf
+            selected_node = None
+            for node, centrality in ce.items():
+                if centrality > max_centrality:
+                    max_centrality = centrality
+                    selected_node = node
+            features['Max_eigenvector_centrality_node'][str(selected_node)] = [self.class_to_int_mapping[node_classes[selected_node]], f'degree: {G.degree[selected_node]}', f'degree centrality: {cd[selected_node]}', f'eigenvector centrality: {ce[selected_node]}', f'closeness centrality: {ccl[selected_node]}', f'betweenness centrality: {cb[selected_node]}', f'katz centrality: {ck[selected_node]}']
+            
+            max_centrality = -np.inf
+            selected_node = None
+            for node, centrality in ccl.items():
+                if centrality > max_centrality:
+                    max_centrality = centrality
+                    selected_node = node
+            features['Max_closeness_centrality_node'][str(selected_node)] = [self.class_to_int_mapping[node_classes[selected_node]], f'degree: {G.degree[selected_node]}', f'degree centrality: {cd[selected_node]}', f'eigenvector centrality: {ce[selected_node]}', f'closeness centrality: {ccl[selected_node]}', f'betweenness centrality: {cb[selected_node]}', f'katz centrality: {ck[selected_node]}']
+            
+            max_centrality = -np.inf
+            selected_node = None
+            for node, centrality in cb.items():
+                if centrality > max_centrality:
+                    max_centrality = centrality
+                    selected_node = node
+            features['Max_betweenness_centrality_node'][str(selected_node)] = [self.class_to_int_mapping[node_classes[selected_node]], f'degree: {G.degree[selected_node]}', f'degree centrality: {cd[selected_node]}', f'eigenvector centrality: {ce[selected_node]}', f'closeness centrality: {ccl[selected_node]}', f'betweenness centrality: {cb[selected_node]}', f'katz centrality: {ck[selected_node]}']
+            
+            max_centrality = -np.inf
+            selected_node = None
+            for node, centrality in ck.items():
+                if centrality > max_centrality:
+                    max_centrality = centrality
+                    selected_node = node
+            features['Max_katz_centrality_node'][str(selected_node)] = [self.class_to_int_mapping[node_classes[selected_node]], f'degree: {G.degree[selected_node]}', f'degree centrality: {cd[selected_node]}', f'eigenvector centrality: {ce[selected_node]}', f'closeness centrality: {ccl[selected_node]}', f'betweenness centrality: {cb[selected_node]}', f'katz centrality: {ck[selected_node]}']
 
             # features['PageRank'] = nx.pagerank(G, alpha=0.8)
         
         cc = []
-        for i in range(G.number_of_nodes()):
-            cc.append(nx.clustering(G,f'{i}'))
+        for node in G.nodes:
+            cc.append(nx.clustering(G, node))
         
         ##########
         G_max_clique = G.subgraph(features['Max largest clique'])
@@ -544,7 +637,8 @@ class DataProcessor:
         current_node_colors = []
         for node in G_max_clique.nodes:
             current_node_colors.append(self.class_colors[self.class_to_int_mapping[node_classes[node]]])
-        nx.draw_networkx_nodes(G_max_clique, pos=pos, node_color=current_node_colors, node_size=24, ax=ax)
+        nx.draw_networkx_nodes(G_max_clique, pos=pos, node_color=current_node_colors, node_size=304, ax=ax)
+        nx.draw_networkx_labels(G_max_clique, pos=pos, labels={node:node for node in G_max_clique.nodes}, font_size=8, font_color='w')
 
         nx.draw_networkx_edges(G_max_clique, pos=pos, alpha=0.15, width=1, edge_cmap=plt.cm.Greys, edge_color=list(nx.get_edge_attributes(G_max_clique, 'ibd_sum').values()), ax=ax)
 
@@ -663,7 +757,7 @@ class DataProcessor:
         plt.clf()
         fig, ax = plt.subplots(1, 1, figsize=(12, 12))
         ax.axis('off')
-        plt.title(f'k: {i}, number of nodes: {kG.number_of_nodes()} ({dataset_name})')
+        plt.title(f'k-core decomposition, k: {i}, number of nodes: {kG.number_of_nodes()} ({dataset_name})')
 
         node_classes = nx.get_node_attributes(kG, "class")
         unique_node_classes = np.unique(list(node_classes.values())).astype(int)
@@ -671,7 +765,8 @@ class DataProcessor:
         current_node_colors = []
         for node in kG.nodes:
             current_node_colors.append(self.class_colors[self.class_to_int_mapping[node_classes[node]]])
-        nx.draw_networkx_nodes(kG, pos=pos, node_color=current_node_colors, node_size=24, ax=ax)
+        nx.draw_networkx_nodes(kG, pos=pos, node_color=current_node_colors, node_size=104, ax=ax)
+        nx.draw_networkx_labels(kG, pos=pos, labels={node:node for node in kG.nodes}, font_size=4, font_color='w')
 
         nx.draw_networkx_edges(kG, pos=pos, alpha=0.35, width=1, edge_cmap=plt.cm.Greys, edge_color=list(nx.get_edge_attributes(kG, 'ibd_sum').values()), ax=ax)
 
@@ -693,14 +788,64 @@ class DataProcessor:
                 simrank_similarity_matrix[source, target] = simrank_similarity[source][target]
 
         plt.clf()
-        img, ax = plt.subplots(1, 1, figsize=(12, 12))
+        img, ax = plt.subplots(1, 1, figsize=(20, 20))
         plt.title(f'Simrank similarity ({dataset_name})')
-        sns.heatmap(simrank_similarity_matrix, cmap=sns.color_palette("ch:s=.25,rot=-.25", as_cmap=True), ax=ax)
+        pic = sns.heatmap(simrank_similarity_matrix, square=True, linewidths=0, annot=False, cmap=sns.color_palette("ch:s=.25,rot=-.25", as_cmap=True), ax=ax)
+        
+        node_classes = nx.get_node_attributes(self.nx_graph, "class")
+        
+        ax.set_xticks(range(len(self.nx_graph)))
+        ax.set_xticklabels([f'{self.class_to_int_mapping[node_classes[node]]} ({node})' for node in self.nx_graph.nodes], fontsize=2)
+        colors = [self.class_colors[self.class_to_int_mapping[node_classes[node]]] for node in self.nx_graph.nodes]
+        for xtick, color in zip(ax.get_xticklabels(), colors):
+            xtick.set_color(color)
+            
+        ax.set_yticks(range(len(self.nx_graph)))
+        ax.set_yticklabels([f'{self.class_to_int_mapping[node_classes[node]]} ({node})' for node in self.nx_graph.nodes], fontsize=2)
+        colors = [self.class_colors[self.class_to_int_mapping[node_classes[node]]] for node in self.nx_graph.nodes]
+        for ytick, color in zip(ax.get_yticklabels(), colors):
+            ytick.set_color(color)
+        
         plt.xticks(rotation=90)
-        plt.savefig(f'{fig_path}simrank_similarity.png', bbox_inches="tight")
+        plt.savefig(f'{fig_path}simrank_similarity.png', bbox_inches="tight", dpi=400)
         plt.show()
         
         ##########
+        
+        simrank_similarity = nx.simrank_similarity(self.nx_graph)
+        simrank_similarity_matrix = np.empty((len(self.nx_graph), len(self.nx_graph)))
+        for source in self.nx_graph.nodes:
+            for target in self.nx_graph.nodes:
+                simrank_similarity_matrix[source, target] = simrank_similarity[source][target]
+
+        rcm = np.array(list(nx.utils.cuthill_mckee_ordering(self.nx_graph, heuristic=None)))
+        plt.clf()
+        img, ax = plt.subplots(1, 1, figsize=(20, 20))
+        plt.title(f'Simrank similarity reordered by Cuthill-McKee algorithm ({dataset_name})')
+        simrank_similarity_matrix = simrank_similarity_matrix[rcm, :]
+        simrank_similarity_matrix = simrank_similarity_matrix[:, rcm]
+        pic = sns.heatmap(simrank_similarity_matrix, square=True, linewidths=0, annot=False, cmap=sns.color_palette("ch:s=.25,rot=-.25", as_cmap=True), ax=ax)
+        
+        node_classes = nx.get_node_attributes(self.nx_graph, "class")
+        
+        ax.set_xticks(range(len(rcm)))
+        ax.set_xticklabels([f'{self.class_to_int_mapping[node_classes[node]]} ({node})' for node in rcm], fontsize=2)
+        colors = [self.class_colors[self.class_to_int_mapping[node_classes[node]]] for node in rcm]
+        for xtick, color in zip(ax.get_xticklabels(), colors):
+            xtick.set_color(color)
+            
+        ax.set_yticks(range(len(rcm)))
+        ax.set_yticklabels([f'{self.class_to_int_mapping[node_classes[node]]} ({node})' for node in rcm], fontsize=2)
+        colors = [self.class_colors[self.class_to_int_mapping[node_classes[node]]] for node in rcm]
+        for ytick, color in zip(ax.get_yticklabels(), colors):
+            ytick.set_color(color)
+        
+        plt.xticks(rotation=90)
+        plt.savefig(f'{fig_path}cuthill_mckee_simrank_similarity.png', bbox_inches="tight", dpi=400)
+        plt.show()
+        
+        with open(f'{fig_path}{dataset_name}_result.json', 'w') as f:
+            json.dump(features, f, cls=NpEncoder)
         
         return features
             #####################################################################################################################################################################################################
