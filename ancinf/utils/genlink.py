@@ -176,6 +176,7 @@ class DataProcessor:
         self.train_size: float = None
         self.valid_size: float = None
         self.test_size: float = None
+        self.mask_size: float = None
         self.edge_probs = None
         self.mean_weight = None
         self.offset = 8.0
@@ -258,22 +259,34 @@ class DataProcessor:
     def node_classes_to_dict(self):
         return {n: c for index, pair in self.node_classes_sorted.iterrows() for n, c in [pair.tolist()]}
         
-    def generate_random_train_valid_test_nodes(self, train_size, valid_size, test_size, random_state, save_dir=None):
+    def generate_random_train_valid_test_nodes(self, train_size, valid_size, test_size, random_state, save_dir=None, mask_size=None):
         if train_size + valid_size + test_size != 1.0:
             raise Exception("All sizes should add up to 1.0!")
 
         self.train_size = train_size
         self.valid_size = valid_size
         self.test_size = test_size
+        if mask_size is not None:
+            self.mask_size = mask_size
         num_nodes_per_class = self.node_classes_sorted.iloc[:, 1].value_counts()
         node_classes_random = self.node_classes_sorted.sample(frac=1, random_state=random_state)
         self.train_nodes, self.valid_nodes, self.test_nodes = [], [], []
+        if mask_size is not None:
+            self.mask_nodes = []
         node_counter = {i: 0 for i in range(num_nodes_per_class.shape[0])}
+        if mask_size is not None:
+            node_counter['masked_nodes'] = 0
 
         for i in range(node_classes_random.shape[0]):
             node_class = node_classes_random.iloc[i, 1]
             if node_counter[node_class] <= int(self.train_size * num_nodes_per_class.loc[node_class]):
-                self.train_nodes.append(node_classes_random.iloc[i, 0])
+                if self.mask_size is not None:
+                    if node_counter[node_class] <= int(self.mask_size * self.train_size * num_nodes_per_class.loc[node_class]):
+                        self.mask_nodes.append(node_classes_random.iloc[i, 0])
+                    else:
+                        self.train_nodes.append(node_classes_random.iloc[i, 0])
+                else:
+                    self.train_nodes.append(node_classes_random.iloc[i, 0])
                 node_counter[node_class] += 1
             elif int((self.train_size + self.valid_size) * num_nodes_per_class.loc[node_class]) >= node_counter[node_class] > int(self.train_size * num_nodes_per_class.loc[node_class]):
                 self.valid_nodes.append(node_classes_random.iloc[i, 0])
@@ -1710,7 +1723,7 @@ class BaselineMethods:
     def __init__(self, data: DataProcessor):
         self.data = data
         
-    def torch_geometric_label_propagation(self, num_layers, alpha, use_weight=True):
+    def torch_geometric_label_propagation(self, num_layers, alpha, use_weight=True, use_masking_from_data=False):
         model = LabelPropagation(num_layers=num_layers, alpha=alpha)
         
         y_pred = []
@@ -1719,7 +1732,13 @@ class BaselineMethods:
             graph = self.data.array_of_graphs_for_testing[i]
             # print(graph.x[-1])
             y_true.append(graph.y[-1])
-            y_pred.append(model(y=graph.y, mask = [True] * (len(graph.y)-1) + [False],  edge_index=graph.edge_index, edge_weight=graph.weight if use_weight==True else None).argmax(dim=-1)[-1]) # -1 is always test vertex
+            if use_masking_from_data:
+                node_mask = list(graph.mask.to('cpu').detach().numpy())
+                assert node_mask[-1] == True
+                node_mask = node_mask[:-1] + [False]
+            else:
+                node_mask = [True] * (len(graph.y)-1) + [False]
+            y_pred.append(model(y=graph.y, mask = node_mask,  edge_index=graph.edge_index, edge_weight=graph.weight if use_weight==True else None).argmax(dim=-1)[-1]) # -1 is always test vertex
             
         f1_macro_score = f1_score(y_true, y_pred, average='macro')
         print(f"f1 macro score on test dataset: {f1_macro_score}")
