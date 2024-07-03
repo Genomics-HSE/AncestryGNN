@@ -877,10 +877,15 @@ class DataProcessor:
 
         return hashmap
 
-    def make_one_hot_encoded_features(self, all_nodes, specific_nodes, hashmap, dict_node_classes, mask_nodes=None):
+    def make_one_hot_encoded_features(self, all_nodes, specific_nodes, hashmap, dict_node_classes, no_mask_class_in_df=None, mask_nodes=None):
         # order of features is the same as order nodes in self.nodes
         if mask_nodes is not None:
-            num_classes = len(self.classes) - 1
+            if no_mask_class_in_df is None:
+                raise Exception('Impossible value for parameter!')
+            elif no_mask_class_in_df:
+                num_classes = len(self.classes)
+            else:
+                num_classes = len(self.classes) - 1
         else:
             num_classes = len(self.classes)
         features = np.zeros((len(all_nodes), num_classes))
@@ -989,27 +994,30 @@ class DataProcessor:
     def get_mask(self, nodes, mask_nodes):
         mask = []
         for node in nodes:
-            if node in mask_nodes:
-                mask.append(False)
+            if mask_nodes is not None:
+                if node in mask_nodes:
+                    mask.append(False)
+                else:
+                    mask.append(True)
             else:
                 mask.append(True)
 
         return torch.tensor(mask)
 
-    def generate_graph(self, curr_nodes, specific_node, dict_node_classes, df, log_edge_weights, feature_type, masking):
+    def generate_graph(self, curr_nodes, specific_node, dict_node_classes, df, log_edge_weights, feature_type, masking, no_mask_class_in_df):
         hashmap = self.make_hashmap(curr_nodes)
         if feature_type == 'one_hot':
             if masking:
                 features = self.make_one_hot_encoded_features(curr_nodes, [specific_node], hashmap,
-                                                              dict_node_classes, mask_nodes=self.mask_nodes)
+                                                              dict_node_classes, mask_nodes=self.mask_nodes, no_mask_class_in_df=no_mask_class_in_df)
             else:
                 features = self.make_one_hot_encoded_features(curr_nodes, [specific_node], hashmap,
                                                               dict_node_classes)
             assert np.sum(np.array(features).sum(axis=1) == 0) == 0
         elif feature_type == 'graph_based':
             if masking:
-                features = self.make_graph_based_features(df.to_numpy(), hashmap, numba.typed.List([specific_node] + self.mask_nodes), len(self.classes)-1, len(curr_nodes))
-                node_mask = self.get_mask(curr_nodes, self.mask_nodes)
+                features = self.make_graph_based_features(df.to_numpy(), hashmap, numba.typed.List([specific_node] + self.mask_nodes), len(self.classes) if no_mask_class_in_df else len(self.classes)-1, len(curr_nodes))
+                # node_mask = self.get_mask(curr_nodes, self.mask_nodes)
             else:
                 features = self.make_graph_based_features(df.to_numpy(), hashmap, numba.typed.List([specific_node]), len(self.classes), len(curr_nodes))
         else:
@@ -1018,30 +1026,37 @@ class DataProcessor:
         weighted_edges = self.construct_edges(df.to_numpy(), hashmap)
 
         # sort edges
+        node_mask = self.get_mask(curr_nodes, self.mask_nodes)
         sort_idx = np.lexsort((weighted_edges[:, 1], weighted_edges[:, 0]))
         weighted_edges = weighted_edges[sort_idx]
 
-        if feature_type == 'graph_based' and masking:
-            graph = Data.from_dict(
-                {'y': torch.tensor(targets, dtype=torch.long), 'x': torch.tensor(features),
-                 'weight': -torch.log(torch.tensor(weighted_edges[:, 2]) / 6600) if log_edge_weights else torch.tensor(weighted_edges[:, 2]),
-                 'edge_index': torch.tensor(weighted_edges[:, :2].T, dtype=torch.long),
-                 'mask': node_mask}) # implement correct and smooth for masking
-        else:
-            graph = Data.from_dict(
-                {'y': torch.tensor(targets, dtype=torch.long), 'x': torch.tensor(features),
-                 'weight': -torch.log(torch.tensor(weighted_edges[:, 2]) / 6600) if log_edge_weights else torch.tensor(weighted_edges[:, 2]), # try 1) log(IBD/8 * e) 2) 1 / T
-                 'edge_index': torch.tensor(weighted_edges[:, :2].T, dtype=torch.long)})
+        # if feature_type == 'graph_based' and masking:
+        #     graph = Data.from_dict(
+        #         {'y': torch.tensor(targets, dtype=torch.long), 'x': torch.tensor(features),
+        #          'weight': -torch.log(torch.tensor(weighted_edges[:, 2]) / 6600) if log_edge_weights else torch.tensor(weighted_edges[:, 2]),
+        #          'edge_index': torch.tensor(weighted_edges[:, :2].T, dtype=torch.long),
+        #          'mask': node_mask}) # implement correct and smooth for masking
+        # else:
+        #     graph = Data.from_dict(
+        #         {'y': torch.tensor(targets, dtype=torch.long), 'x': torch.tensor(features),
+        #          'weight': -torch.log(torch.tensor(weighted_edges[:, 2]) / 6600) if log_edge_weights else torch.tensor(weighted_edges[:, 2]), # try 1) log(IBD/8 * e) 2) 1 / T
+        #          'edge_index': torch.tensor(weighted_edges[:, :2].T, dtype=torch.long)})
+            
+        graph = Data.from_dict(
+            {'y': torch.tensor(targets, dtype=torch.long), 'x': torch.tensor(features),
+             'weight': -torch.log(torch.tensor(weighted_edges[:, 2]) / 6600) if log_edge_weights else torch.tensor(weighted_edges[:, 2]), # try 1) log(IBD/8 * e) 2) 1 / T
+             'edge_index': torch.tensor(weighted_edges[:, :2].T, dtype=torch.long),
+             'mask': node_mask})
 
         if not masking and feature_type == 'one_hot':
             # mask for correcting GNN predictions with label propagation
             correct_and_smooth_mask = torch.tensor([True] * (len(targets)-1) + [False]).bool()
             graph.correct_and_smooth_mask = correct_and_smooth_mask
-        graph.num_classes = len(self.classes) - 1 if masking else len(self.classes)
+        graph.num_classes = len(self.classes) - 1 if (masking and not no_mask_class_in_df) else len(self.classes)
 
         return graph
 
-    def make_train_valid_test_datasets_with_numba(self, feature_type, model_type, train_dataset_type, test_dataset_type, dataset_name, log_edge_weights=False, skip_train_val=False, masking=False, save_isolated_nodes=True):
+    def make_train_valid_test_datasets_with_numba(self, feature_type, model_type, train_dataset_type, test_dataset_type, dataset_name, log_edge_weights=False, skip_train_val=False, masking=False, no_mask_class_in_df=False):
 
         self.dataset_name = dataset_name
 
@@ -1069,7 +1084,7 @@ class DataProcessor:
                         else:
                             curr_train_nodes, specific_node = self.place_specific_node_to_the_end(self.train_nodes, k)
 
-                        graph = self.generate_graph(curr_train_nodes, specific_node, dict_node_classes, df_for_training, log_edge_weights, feature_type, masking=masking)
+                        graph = self.generate_graph(curr_train_nodes, specific_node, dict_node_classes, df_for_training, log_edge_weights, feature_type, masking=masking, no_mask_class_in_df=no_mask_class_in_df)
                         
                         assert graph.x.shape[0] == len(curr_train_nodes)
 
@@ -1099,7 +1114,7 @@ class DataProcessor:
                         else:
                             current_valid_nodes = self.train_nodes + [specific_node]
 
-                        graph = self.generate_graph(current_valid_nodes, specific_node, dict_node_classes, df_for_validation, log_edge_weights, feature_type, masking=masking)
+                        graph = self.generate_graph(current_valid_nodes, specific_node, dict_node_classes, df_for_validation, log_edge_weights, feature_type, masking=masking, no_mask_class_in_df=no_mask_class_in_df)
                         
                         assert graph.x.shape[0] == len(current_valid_nodes)
 
@@ -1128,7 +1143,7 @@ class DataProcessor:
                     else:
                         current_test_nodes = self.train_nodes + [specific_node]
 
-                    graph = self.generate_graph(current_test_nodes, specific_node, dict_node_classes, df_for_testing, log_edge_weights, feature_type, masking=masking)
+                    graph = self.generate_graph(current_test_nodes, specific_node, dict_node_classes, df_for_testing, log_edge_weights, feature_type, masking=masking, no_mask_class_in_df=no_mask_class_in_df)
                     
                     assert graph.x.shape[0] == len(current_test_nodes)
 
@@ -1153,7 +1168,7 @@ class DataProcessor:
                         else:
                             current_train_nodes = self.train_nodes
 
-                        graph = self.generate_graph(current_train_nodes, -1, dict_node_classes, df_for_training, log_edge_weights, feature_type, masking=masking)
+                        graph = self.generate_graph(current_train_nodes, -1, dict_node_classes, df_for_training, log_edge_weights, feature_type, masking=masking, no_mask_class_in_df=no_mask_class_in_df)
                         
                         assert graph.x.shape[0] == len(current_train_nodes)
 
@@ -1183,7 +1198,7 @@ class DataProcessor:
                         else:
                             current_valid_nodes = self.train_nodes + [specific_node] # important to place specific_node in the end
 
-                        graph = self.generate_graph(current_valid_nodes, specific_node, dict_node_classes, df_for_validation, log_edge_weights, feature_type, masking=masking)
+                        graph = self.generate_graph(current_valid_nodes, specific_node, dict_node_classes, df_for_validation, log_edge_weights, feature_type, masking=masking, no_mask_class_in_df=no_mask_class_in_df)
                         
                         assert graph.x.shape[0] == len(current_valid_nodes)
 
@@ -1212,7 +1227,7 @@ class DataProcessor:
                     else:
                         current_test_nodes = self.train_nodes + [specific_node] # important to place specific_node in the end
 
-                    graph = self.generate_graph(current_test_nodes, specific_node, dict_node_classes, df_for_testing, log_edge_weights, feature_type, masking=masking)
+                    graph = self.generate_graph(current_test_nodes, specific_node, dict_node_classes, df_for_testing, log_edge_weights, feature_type, masking=masking, no_mask_class_in_df=no_mask_class_in_df)
                     
                     assert graph.x.shape[0] == len(current_test_nodes)
 
@@ -1383,7 +1398,7 @@ class NullSimulator:
 
 
 class Trainer:
-    def __init__(self, data: DataProcessor, model_cls, lr, wd, loss_fn, batch_size, log_dir, patience, num_epochs, feature_type, train_iterations_per_sample, evaluation_steps, weight=None, cuda_device_specified: int = None, masking=False, disable_printing=True, optimize_memory_transfer=True, model_params=None, seed=42, save_model_in_ram=False, correct_and_smooth=False):
+    def __init__(self, data: DataProcessor, model_cls, lr, wd, loss_fn, batch_size, log_dir, patience, num_epochs, feature_type, train_iterations_per_sample, evaluation_steps, weight=None, cuda_device_specified: int = None, masking=False, disable_printing=True, optimize_memory_transfer=True, model_params=None, seed=42, save_model_in_ram=False, correct_and_smooth=False, no_mask_class_in_df=False):
         self.data = data
         self.model = None
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') if cuda_device_specified is None else torch.device(f'cuda:{cuda_device_specified}' if torch.cuda.is_available() else 'cpu')
@@ -1393,7 +1408,7 @@ class Trainer:
         self.learning_rate = lr
         self.weight_decay = wd
         self.loss_fn = loss_fn
-        if masking:
+        if masking and not no_mask_class_in_df:
             self.weight = torch.tensor([1. for i in range(len(self.data.classes)-1)]).to(self.device) if weight is None else weight
         else:
             self.weight = torch.tensor([1. for i in range(len(self.data.classes))]).to(self.device) if weight is None else weight
@@ -1602,6 +1617,7 @@ class Trainer:
                         data_curr = self.data.array_of_graphs_for_training[n].to(self.device)
                         optimizer.zero_grad()
                         out = self.model(data_curr)
+                        # print(data_curr.x.shape, out[-1], data_curr.y[-1])
                         loss = criterion(out[-1], data_curr.y[-1])
                         loss.backward()
                         mean_epoch_loss.append(loss.detach().cpu().numpy())
