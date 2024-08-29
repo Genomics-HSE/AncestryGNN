@@ -8,6 +8,8 @@ import json
 import os
 import glob
 
+from .utils.ibdloader import data_stats
+
 
 @click.group()
 def cli():
@@ -20,9 +22,9 @@ def getparams_fn(datadir, workdir, infile, outfile):
         # try to remove .ancinf from infile
         position = infile.find('.ancinf')
         if position > 0:
-            outfile = infile[:position]+'.params'
+            outfile = infile[:position] + '.params'
         else:
-            outfile = infile+'.params'
+            outfile = infile + '.params'
     sim.collectandsaveparams(datadir, workdir, infile, outfile)
     print("Finished!")
 
@@ -32,7 +34,7 @@ def getparams_fn(datadir, workdir, infile, outfile):
 @click.argument("workdir")
 @click.option("--infile", default="project.ancinf", help="Project file, defaults to project.ancinf")
 @click.option("--outfile", default=None, help="Output file with simulation parameters, "
-              "defaults to project file with '.params' extension")
+                                              "defaults to project file with '.params' extension")
 def getparams(datadir, workdir, infile, outfile):
     """Collect parameters of csv files in the DATADIR listed in project file from WORKDIR"""
     getparams_fn(datadir, workdir, infile, outfile)
@@ -44,13 +46,13 @@ def preprocess_fn(datadir, workdir, infile, outfile, seed):
         # try to remove .ancinf from infile
         position = infile.find('.ancinf')
         if position > 0:
-            outfile = infile[:position]+'.explist'
+            outfile = infile[:position] + '.explist'
         else:
-            outfile = infile+'.explist'
+            outfile = infile + '.explist'
     rng = np.random.default_rng(seed)
     start = time.time()
     sim.preprocess(datadir, workdir, infile, outfile, rng)
-    print(f"Finished! Total {time.time()-start:.2f}s")
+    print(f"Finished! Total {time.time() - start:.2f}s")
 
 
 @cli.command()
@@ -58,12 +60,12 @@ def preprocess_fn(datadir, workdir, infile, outfile, seed):
 @click.argument("workdir")
 @click.option("--infile", default="project.ancinf", help="Project file, defaults to project.ancinf")
 @click.option("--outfile", default=None, help="Output file with experiment list, defaults to project "
-              "file with '.explist' extension")
+                                              "file with '.explist' extension")
 @click.option("--seed", default=2023, help="Random seed")
 def preprocess(datadir, workdir, infile, outfile, seed):
     """Filter datsets from DATADIR, generate train-val-test splits and experiment list file in WORKDIR"""
     preprocess_fn(datadir, workdir, infile, outfile, seed)
-    
+
 
 # STAGE 2 SIMULATE
 def simulate_fn(workdir, infile, outfile, seed):
@@ -71,21 +73,21 @@ def simulate_fn(workdir, infile, outfile, seed):
         # try to remove .ancinf from infile
         position = infile.find('.params')
         if position > 0:
-            outfile = infile[:position]+'.explist'
+            outfile = infile[:position] + '.explist'
         else:
-            outfile = infile+'.explist'
+            outfile = infile + '.explist'
 
     rng = np.random.default_rng(seed)
     start = time.time()
     sim.simulateandsave(workdir, infile, outfile, rng)
-    print(f"Finished! Total {time.time()-start:.2f}s")
+    print(f"Finished! Total {time.time() - start:.2f}s")
 
 
 @cli.command()
 @click.argument("workdir")
 @click.option("--infile", default="project.params", help="File with simulation parameters, defaults to project.params")
 @click.option("--outfile", default=None, help="Output file with experiment list, defaults to project file "
-              "with '.explist' extension")
+                                              "with '.explist' extension")
 @click.option("--seed", default=2023, help="Random seed")
 def simulate(workdir, infile, outfile, seed):
     """Generate ibd graphs, corresponding slpits and experiment list file for parameters in INFILE"""
@@ -181,16 +183,16 @@ def crossval_fn(workdir, infile, outfile, seed, processes, fromexp, toexp, froms
         sim.runandsaveall(workdir, infile, outfilebase, fromexp, toexp, fromsplit, tosplit, gpu)
     else:
         # get every process only one job computing splitrange aforehead
-        splitcount = int(tosplit)-int(fromsplit)
+        splitcount = int(tosplit) - int(fromsplit)
         splitsperproc = splitcount // processes
-        splitincrements = [splitsperproc]*processes
+        splitincrements = [splitsperproc] * processes
         for idx in range(splitcount % processes):
             splitincrements[idx] += 1
         splitrange = [int(fromsplit)]
         incr = 0
         for idx in range(processes):
             incr += splitincrements[idx]
-            splitrange.append(int(fromsplit)+incr)
+            splitrange.append(int(fromsplit) + incr)
 
         print("Split seprarators:", splitrange)
 
@@ -200,7 +202,7 @@ def crossval_fn(workdir, infile, outfile, seed, processes, fromexp, toexp, froms
                      "fromexp": fromexp,
                      "toexp": toexp,
                      "fromsplit": splitrange[procnum],
-                     "tosplit": splitrange[procnum+1],
+                     "tosplit": splitrange[procnum + 1],
                      "gpu": procnum % gpucount} for procnum in range(processes)]
         print(taskargs)
 
@@ -213,7 +215,7 @@ def crossval_fn(workdir, infile, outfile, seed, processes, fromexp, toexp, froms
         else:
             outfile_exp_postfix = "_e" + str(fromexp) + "-" + str(toexp)
         outfile_split_postfix = "_s" + str(fromsplit) + "-" + str(tosplit)
-        outfilename = outfilebase + outfile_exp_postfix+outfile_split_postfix + '.results'
+        outfilename = outfilebase + outfile_exp_postfix + outfile_split_postfix + '.results'
         partresults = []
         for partresultfile in resfiles:
             with open(partresultfile, "r") as f:
@@ -223,14 +225,14 @@ def crossval_fn(workdir, infile, outfile, seed, processes, fromexp, toexp, froms
         with open(os.path.join(workdir, outfilename), "w", encoding="utf-8") as f:
             json.dump(combined_results, f, indent=4, sort_keys=True)
 
-    print(f"Finished! Total {time.time()-start:.2f}s.")
+    print(f"Finished! Total {time.time() - start:.2f}s.")
 
 
 @cli.command()
 @click.argument("workdir")
 @click.option("--infile", default="project.explist", help="File with experiment list, defaults to project.explist")
 @click.option("--outfile", default=None, help="File with classification metrics, defaults to project file "
-              "with '.result' extension")
+                                              "with '.result' extension")
 @click.option("--seed", default=2023, help="Random seed")
 @click.option("--processes", default=1, help="Number of parallel workers")
 @click.option("--fromexp", default=None, help="The first experiment to run")
@@ -247,7 +249,7 @@ def crossval(workdir, infile, outfile, seed, processes, fromexp, toexp, fromspli
 # STAGE 4 INFERENCE
 def infer_fn(workdir, infile, inferdf):
     result = sim.inference(workdir, infile, inferdf)
-    outfilename = inferdf+".inferred"
+    outfilename = inferdf + ".inferred"
 
     with open(os.path.join(workdir, outfilename), "w", encoding="utf-8") as f:
         json.dump(result, f, indent=4, sort_keys=True)
@@ -292,6 +294,37 @@ def combine(workdir, outfile):
     Combine .results files from a folder
     '''
     combine_fn(workdir, outfile)
+
+
+@cli.command()
+@click.argument("datadir", type=click.Path(exists=True, readable=True))
+def stats(datadir):
+    """
+    Analyzes the dataset of a graph and outputs various statistics.
+
+    This function performs the following steps:
+    1. Checks if the dataset has duplicate edges.
+    2. Check if the dataset includes every region data id.
+    3. Outputs various statistics about the graph, including:
+       - Number of edges in the graph.
+       - Number of vertices (nodes) in the graph.
+       - Descriptive statistics of the graph's edge weights, including:
+         - minimum
+         - maximum
+         - mean
+         - standard deviation
+         - 25th percentile
+         - median
+         - 75th percentile
+
+    Parameters:
+    - datadir (str): The file path to the dataset containing the graph data.
+
+    Returns:
+    None. Prints the statistics.
+    """
+    data_stats(datadir)
+
 
 def main():
     cli()
