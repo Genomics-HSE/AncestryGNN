@@ -300,9 +300,20 @@ def simulateandsave(workdir, infile, outfile, rng):
         json.dump(expfiledict, f, indent=4, sort_keys=True)
 
 
-def filterandsaveonedataset(indatafilename, outdatapathfilenamebase, filters, cleanshare, maskshare, rng):
+def filterandsaveonedataset(indatafilename, labelfilenames, outdatapathfilenamebase, datasetparams, cleanshare, maskshare, rng):
+    filters = datasetparams["filters"]    
     retval = None
-    pairs, weights, labels, labeldict, idxtranslator = load_pure( indatafilename, debug=False, **(filters))
+    
+    # if maskshare > 0 we are creating masked nodes artificially
+    # if include_unknown is set, then there are unlabelled nodes 
+    # in the original dataset that will be included with label 'masked'
+    
+    unknown_share = 0
+    if "include_unknown" in datasetparams:
+        unknown_share = datasetparams["include_unknown"]
+    
+    pairs, weights, labels, labeldict, idxtranslator = load_pure( indatafilename, labelfilenames, unknown_share, debug=False, **(filters))
+    
     conseq_pairs = translate_indices(pairs, idxtranslator)
     labellist = labeldict_to_labellist(labeldict)
         
@@ -310,9 +321,10 @@ def filterandsaveonedataset(indatafilename, outdatapathfilenamebase, filters, cl
     ncls = graphdata[0]['nodeclasses']
     grph = graphdata[0]['graph']
     trns = graphdata[0]['translation']
-    #translate indices in ncls to original indices
+    # translate indices in ncls to original indices
     permt = getrandompermutation(ncls, rng)
-
+    
+    # TODO include all nodes of label "masked" into masked nodes for correct dividing
     trainnodeclasses, valnodeclasses, testnodeclasses = dividetrainvaltest(ncls, maskshare, cleanshare, permt)
     part_ok, part_errors = checkpartition(grph, trainnodeclasses, valnodeclasses, testnodeclasses, details=False, trns=trns)
     if not part_ok:
@@ -406,6 +418,11 @@ def preprocess(datadir, workdir, infile, outfile, rng):
         datasetparams = datasets[datasetname]
                 
         indatafilename = os.path.join(datadir, datasetname+'.csv' )
+        labelfilenames = {}
+        if "labelfiles" in datasetparams:
+            for lbl in datasetparams["labelfiles"]:
+                labelfilenames[lbl] = os.path.join(datadir, lbl+'.csv' )
+        
         outdatafilenamebase =  projname+'_'+datasetname                
         
         if "cleanshare" in trainparams:
@@ -417,9 +434,11 @@ def preprocess(datadir, workdir, infile, outfile, rng):
             maskshare = trainparams["maskshare"]            
         else:
             maskshare = 0
-            
-            
-        retval = filterandsaveonedataset(indatafilename, os.path.join(workdir, outdatafilenamebase), datasetparams["filters"], cleanshare, maskshare, rng)
+        
+        
+        retval = filterandsaveonedataset(indatafilename, labelfilenames, os.path.join(workdir, outdatafilenamebase), datasetparams, cleanshare, maskshare, rng)
+        
+        
         
         savepartitions(os.path.join(workdir, outdatafilenamebase+ '.csv'), trainparams["valshare"], trainparams["testshare"],
                        trainparams["split_count"], os.path.join(workdir, outdatafilenamebase+ '.split'), rng)

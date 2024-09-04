@@ -46,7 +46,7 @@ def checkuniqids(uniqids):
         print("WARNING: ids are not consequtive, must be translated!")
 
 
-def load_pure(datafilename, minclassize=None, removeclasses=None, only=None, debug=True):
+def load_pure(datafilename, labelfilenames={}, unknown_share=0, minclassize=None, removeclasses=None, only=None, debug=True):
     '''Verify and load files from dataset1 pure format
         into numpy arrays
     
@@ -54,6 +54,10 @@ def load_pure(datafilename, minclassize=None, removeclasses=None, only=None, deb
     ----------
     datafilename: str
         filename for the list of edges with weights, counts and node descriptions         
+    labelfilenames: dict
+        use when there are labels in separate files, not in the graph datafile. format: {"label":"labeldatafile.csv"}
+    unknown_share: float
+        if there are unlabellede nodes include some of them (and their edges) with label "masked"
     minclassize: int
         minimum class size to be included to returned nodes 
     removeclasses: list
@@ -69,11 +73,33 @@ def load_pure(datafilename, minclassize=None, removeclasses=None, only=None, deb
         if ibd_max column is present, then also contains a column for max values
     labels: ndarray
         array of ints with class number for every node
-    labeldict: dict of labels
+    labeldict: dict of labels eg {"pop1":0, "pop2":1}
     idxtranslator: i-th node_id in the i-th element
     '''
     dfibd = pandas.read_csv(datafilename)
-    stripnodename(dfibd)
+    if labelfilenames=={}:
+        stripnodename(dfibd)
+    else:
+        # TODO remove extra work as we already have normal structure in this case
+        # add columns with label_id1 and label_id2 with numerical stirngs
+        # first fill with masked then use all the label datafiles
+        dfibd["label_id1"] = 'masked'
+        dfibd["label_id2"] = 'masked'
+        for lbl in labelfilenames:
+            onelabeldf = pandas.read_csv(labelfilenames[lbl])
+            ids = np.ravel(onelabeldf[['anonymized_id']].to_numpy())
+            print(ids)
+            print(type(ids))
+            print(ids.shape)
+            
+            for itr, idx in enumerate(ids):
+                print("fixing", lbl, " : " , itr, "of ", ids.shape[0])
+                dfibd.loc[dfibd["node_id1"]==idx, "label_id1"] = lbl
+                dfibd.loc[dfibd["node_id2"]==idx, "label_id2"] = lbl
+        # todo we want full graph or at leastf unknown_share
+        removeweakclasses(dfibd, ['masked'], debug)
+        
+        
     if not (removeclasses is None):
         removeweakclasses(dfibd, removeclasses, debug)
     uniqids = getuniqnodes(dfibd, 'ibd', debug)
@@ -82,7 +108,8 @@ def load_pure(datafilename, minclassize=None, removeclasses=None, only=None, deb
     uniqids = uniqids.sort_values(by=['node_id'])
 
     labeldf = uniqids[['label_id']].drop_duplicates()
-
+        
+        
     # compile label dictionary
     lbl = 0
     labeldict = {}
@@ -133,7 +160,7 @@ def load_pure(datafilename, minclassize=None, removeclasses=None, only=None, deb
         uniqids = uniqids.sort_values(by=['node_id'])
 
         labeldf = uniqids[['label_id']].drop_duplicates()
-
+        
         # compile label dictionary
         lbl = 0
         labeldict = {}
@@ -269,10 +296,22 @@ def get_region_ids():
     yaroslavl_path = r'data/ibd_graph/yaroslavskaya_anonymized.csv'
 
     kaluga_df = get_fixed_region_df(kaluga_path)
+    kaluga_count = len(kaluga_df['anonymized_id'].unique())
+    print('kaluga:', kaluga_count)
     krasnodar_df = get_fixed_region_df(krasnodar_path)
+    krasnodar_count = len(krasnodar_df['anonymized_id'].unique())
+    print('krasnodar:', krasnodar_count)
     ryazan_df = get_fixed_region_df(ryazan_path)
+    ryazan_count = len(ryazan_df['anonymized_id'].unique())
+    print('ryazan:', ryazan_count)
     vologda_df = get_fixed_region_df(vologda_path)
+    vologda_count = len(vologda_df['anonymized_id'].unique())
+    print('vologda:', vologda_count)
     yaroslavl_df = get_fixed_region_df(yaroslavl_path)
+    yaroslavl_count = len(yaroslavl_df['anonymized_id'].unique())
+    print('yaroslavl:', yaroslavl_count)
+    total_count = kaluga_count + krasnodar_count + ryazan_count + vologda_count + yaroslavl_count
+    print("total:", total_count)
 
     regions_ids_df = pandas.concat([kaluga_df, krasnodar_df, ryazan_df, vologda_df, yaroslavl_df])
 
