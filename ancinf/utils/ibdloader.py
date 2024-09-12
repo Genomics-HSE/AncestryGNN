@@ -96,7 +96,7 @@ def load_pure(datafilename, labelfilenames={}, unknown_share=0, minclassize=None
             print("label", lbl, "size", ids.shape)
             print("finding unique indices by file")
             # 1. one id multiple times in one file -> just inform
-            ids, counts = numpy.unique(ids, return_counts=True)
+            ids, counts = np.unique(ids, return_counts=True)
             multips = counts>1
             print (list(zip(ids[multips], counts[multips])))
         
