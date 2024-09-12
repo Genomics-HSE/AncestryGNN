@@ -57,7 +57,7 @@ def load_pure(datafilename, labelfilenames={}, unknown_share=0, minclassize=None
     labelfilenames: dict
         use when there are labels in separate files, not in the graph datafile. format: {"label":"labeldatafile.csv"}
     unknown_share: float
-        if there are unlabellede nodes include some of them (and their edges) with label "masked"
+        if there are unlabelled nodes include some of them (and their edges) with label "masked"
     minclassize: int
         minimum class size to be included to returned nodes 
     removeclasses: list
@@ -85,18 +85,46 @@ def load_pure(datafilename, labelfilenames={}, unknown_share=0, minclassize=None
         # first fill with masked then use all the label datafiles
         dfibd["label_id1"] = 'masked'
         dfibd["label_id2"] = 'masked'
+        
+        labelarrays = {}
         for lbl in labelfilenames:
             onelabeldf = pandas.read_csv(labelfilenames[lbl])
             ids = np.ravel(onelabeldf[['anonymized_id']].to_numpy())
-            print(ids)
-            print(type(ids))
-            print(ids.shape)
-            
-            for itr, idx in enumerate(ids):
-                print("fixing", lbl, " : " , itr, "of ", ids.shape[0])
+            labelarrays[lbl] = ids
+            #print(ids)
+            #print(type(ids))
+            print("label", lbl, "size", ids.shape)
+            print("finding unique indices by file")
+            # 1. one id multiple times in one file -> just inform
+            ids, counts = numpy.unique(ids, return_counts=True)
+            multips = counts>1
+            print (list(zip(ids[multips], counts[multips])))
+        
+        # 2. one id appears in multiple datasets -> inform and remove them
+        to_remove = set()
+        for lbl1 in labelarrays: 
+            for lbl2 in labelarrays:
+                if lbl1 != lbl2:
+                    isect = set(labelarrays[lbl1]).intersection(labelarrays[lbl2])
+                    print(f"Nodes in both {lbl1} and {lbl2}:")
+                    print(isect)
+                    to_remove.update(isect)
+        # remove 
+        for lbl in labelarrays: 
+            labelarrays[lbl] = np.array(set(labelarrays[lbl]).difference(isect))
+                                
+        
+        # TODO
+        # 4. check indices are present in graph -> inform and remove non-present
+        # 3. after graph loading find close relatives with different labels
+        
+        
+        for lbl in labelarrays:
+            for itr, idx in enumerate(labelarays[lbl]):
+                print("fixing", lbl, " : " , itr, "of ", labelarays[lbl].shape[0], "elements")
                 dfibd.loc[dfibd["node_id1"]==idx, "label_id1"] = lbl
                 dfibd.loc[dfibd["node_id2"]==idx, "label_id2"] = lbl
-        # todo we want full graph or at leastf unknown_share
+        # todo we want full graph or at least unknown_share
         removeweakclasses(dfibd, ['masked'], debug)
         
         
