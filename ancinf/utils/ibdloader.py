@@ -111,7 +111,9 @@ def load_pure(datafilename, labelfilenames={}, unknown_share=0, minclassize=None
                     to_remove.update(isect)
         # remove 
         for lbl in labelarrays: 
-            labelarrays[lbl] = np.array(set(labelarrays[lbl]).difference(isect))
+            labelarrays[lbl] = np.array(list(set(labelarrays[lbl]).difference(to_remove)))
+            print(lbl, "after removing duplicates:")
+            print(labelarrays[lbl])
                                 
         
         # TODO
@@ -120,8 +122,8 @@ def load_pure(datafilename, labelfilenames={}, unknown_share=0, minclassize=None
         
         
         for lbl in labelarrays:
-            for itr, idx in enumerate(labelarays[lbl]):
-                print("fixing", lbl, " : " , itr, "of ", labelarays[lbl].shape[0], "elements")
+            for itr, idx in enumerate(labelarrays[lbl]):
+                print("fixing", lbl, " : " , itr, "of ", labelarrays[lbl].shape[0], "elements")
                 dfibd.loc[dfibd["node_id1"]==idx, "label_id1"] = lbl
                 dfibd.loc[dfibd["node_id2"]==idx, "label_id2"] = lbl
         # todo we want full graph or at least unknown_share
