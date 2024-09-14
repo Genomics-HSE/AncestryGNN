@@ -1,6 +1,9 @@
+import os
 import pandas
 import numpy as np
 import networkx as nx
+
+from collections import defaultdict
 
 
 def stripnodename(df):
@@ -46,7 +49,8 @@ def checkuniqids(uniqids):
         print("WARNING: ids are not consequtive, must be translated!")
 
 
-def load_pure(datafilename, labelfilenames={}, unknown_share=0, minclassize=None, removeclasses=None, only=None, debug=True):
+def load_pure(datafilename, labelfilenames={}, unknown_share=0, minclassize=None, removeclasses=None, only=None,
+              debug=True):
     '''Verify and load files from dataset1 pure format
         into numpy arrays
     
@@ -77,7 +81,7 @@ def load_pure(datafilename, labelfilenames={}, unknown_share=0, minclassize=None
     idxtranslator: i-th node_id in the i-th element
     '''
     dfibd = pandas.read_csv(datafilename)
-    if labelfilenames=={}:
+    if labelfilenames == {}:
         stripnodename(dfibd)
     else:
         # TODO remove extra work as we already have normal structure in this case
@@ -85,24 +89,24 @@ def load_pure(datafilename, labelfilenames={}, unknown_share=0, minclassize=None
         # first fill with masked then use all the label datafiles
         dfibd["label_id1"] = 'masked'
         dfibd["label_id2"] = 'masked'
-        
+
         labelarrays = {}
         for lbl in labelfilenames:
             onelabeldf = pandas.read_csv(labelfilenames[lbl])
             ids = np.ravel(onelabeldf[['anonymized_id']].to_numpy())
             labelarrays[lbl] = ids
-            #print(ids)
-            #print(type(ids))
+            # print(ids)
+            # print(type(ids))
             print("label", lbl, "size", ids.shape)
             print("finding unique indices by file")
             # 1. one id multiple times in one file -> just inform
             ids, counts = np.unique(ids, return_counts=True)
-            multips = counts>1
-            print (list(zip(ids[multips], counts[multips])))
-        
+            multips = counts > 1
+            print(list(zip(ids[multips], counts[multips])))
+
         # 2. one id appears in multiple datasets -> inform and remove them
         to_remove = set()
-        for lbl1 in labelarrays: 
+        for lbl1 in labelarrays:
             for lbl2 in labelarrays:
                 if lbl1 != lbl2:
                     isect = set(labelarrays[lbl1]).intersection(labelarrays[lbl2])
@@ -110,26 +114,23 @@ def load_pure(datafilename, labelfilenames={}, unknown_share=0, minclassize=None
                     print(isect)
                     to_remove.update(isect)
         # remove 
-        for lbl in labelarrays: 
+        for lbl in labelarrays:
             labelarrays[lbl] = np.array(list(set(labelarrays[lbl]).difference(to_remove)))
             print(lbl, "after removing duplicates:")
             print(labelarrays[lbl])
-                                
-        
+
         # TODO
         # 4. check indices are present in graph -> inform and remove non-present
         # 3. after graph loading find close relatives with different labels
-        
-        
+
         for lbl in labelarrays:
             for itr, idx in enumerate(labelarrays[lbl]):
-                print("fixing", lbl, " : " , itr, "of ", labelarrays[lbl].shape[0], "elements")
-                dfibd.loc[dfibd["node_id1"]==idx, "label_id1"] = lbl
-                dfibd.loc[dfibd["node_id2"]==idx, "label_id2"] = lbl
+                print("fixing", lbl, " : ", itr, "of ", labelarrays[lbl].shape[0], "elements")
+                dfibd.loc[dfibd["node_id1"] == idx, "label_id1"] = lbl
+                dfibd.loc[dfibd["node_id2"] == idx, "label_id2"] = lbl
         # todo we want full graph or at least unknown_share
         removeweakclasses(dfibd, ['masked'], debug)
-        
-        
+
     if not (removeclasses is None):
         removeweakclasses(dfibd, removeclasses, debug)
     uniqids = getuniqnodes(dfibd, 'ibd', debug)
@@ -138,8 +139,7 @@ def load_pure(datafilename, labelfilenames={}, unknown_share=0, minclassize=None
     uniqids = uniqids.sort_values(by=['node_id'])
 
     labeldf = uniqids[['label_id']].drop_duplicates()
-        
-        
+
     # compile label dictionary
     lbl = 0
     labeldict = {}
@@ -190,7 +190,7 @@ def load_pure(datafilename, labelfilenames={}, unknown_share=0, minclassize=None
         uniqids = uniqids.sort_values(by=['node_id'])
 
         labeldf = uniqids[['label_id']].drop_duplicates()
-        
+
         # compile label dictionary
         lbl = 0
         labeldict = {}
@@ -299,60 +299,62 @@ def get_weighted_dataloaders():
     pass
 
 
-def get_fixed_region_df(node_list_path):
-    '''
-        the function cleans the region datasets by removing extra words and duplicate rows.
-    '''
+def load_region_df(region_df_path):
+    print("------------------------------------------------------------")
+    print(f"Loading {region_df_path}.")
+    nodes_df = pandas.read_csv(region_df_path)
+    print("The following values were encountered in the field 'value':")
+    value_counts = nodes_df['value'].value_counts()
+    print(value_counts.to_string())
 
-    node_list_df = pandas.read_csv(node_list_path)
+    total_rows = nodes_df.shape[0]
+    unique_ids = nodes_df['anonymized_id'].nunique()
+    print("Total rows:", total_rows)
+    print("Unique ids:", unique_ids)
 
     # Replace extra words in value column
-    node_list_df['value'] = node_list_df['value'].str.replace(' область', '', regex=False)
-    node_list_df['value'] = node_list_df['value'].str.replace(' край', '', regex=False)
+    nodes_df['value'] = nodes_df['value'].str.replace(' область', '', regex=False)
+    nodes_df['value'] = nodes_df['value'].str.replace(' край', '', regex=False)
     # Delete duplicate rows
-    node_list_df = node_list_df.drop_duplicates()
+    node_list_df = nodes_df.drop_duplicates()
 
     return node_list_df
-
-
-def get_region_ids():
-    '''
-        returns numpy.ndarray of all ids that present in the region datasets
-    '''
-    kaluga_path = r'data/ibd_graph/kaluzskaya_anonymized.csv'
-    krasnodar_path = r'data/ibd_graph/krasnodarskiy_anonymized.csv'
-    ryazan_path = r'data/ibd_graph/ryazanskaya_anonymized.csv'
-    vologda_path = r'data/ibd_graph/vologodskaya_anonymized.csv'
-    yaroslavl_path = r'data/ibd_graph/yaroslavskaya_anonymized.csv'
-
-    kaluga_df = get_fixed_region_df(kaluga_path)
-    kaluga_count = len(kaluga_df['anonymized_id'].unique())
-    print('kaluga:', kaluga_count)
-    krasnodar_df = get_fixed_region_df(krasnodar_path)
-    krasnodar_count = len(krasnodar_df['anonymized_id'].unique())
-    print('krasnodar:', krasnodar_count)
-    ryazan_df = get_fixed_region_df(ryazan_path)
-    ryazan_count = len(ryazan_df['anonymized_id'].unique())
-    print('ryazan:', ryazan_count)
-    vologda_df = get_fixed_region_df(vologda_path)
-    vologda_count = len(vologda_df['anonymized_id'].unique())
-    print('vologda:', vologda_count)
-    yaroslavl_df = get_fixed_region_df(yaroslavl_path)
-    yaroslavl_count = len(yaroslavl_df['anonymized_id'].unique())
-    print('yaroslavl:', yaroslavl_count)
-    total_count = kaluga_count + krasnodar_count + ryazan_count + vologda_count + yaroslavl_count
-    print("total:", total_count)
-
-    regions_ids_df = pandas.concat([kaluga_df, krasnodar_df, ryazan_df, vologda_df, yaroslavl_df])
-
-    return regions_ids_df['anonymized_id'].unique()
 
 
 def data_stats(datadir):
     '''
         analyzes the dataset of a graph and outputs various statistics.
     '''
-    graph_df = pandas.read_csv(datadir, dtype={
+
+    regions = ['kaluga', 'krasnodar', 'ryazan', 'vologda', 'yaroslavl']
+
+    graph_path = os.path.join(datadir, 'df_anonymized.csv')
+    kaluga_path = os.path.join(datadir, 'kaluzskaya_anonymized.csv')
+    krasnodar_path = os.path.join(datadir, 'krasnodarskiy_anonymized.csv')
+    ryazan_path = os.path.join(datadir, 'ryazanskaya_anonymized.csv')
+    vologda_path = os.path.join(datadir, 'vologodskaya_anonymized.csv')
+    yaroslavl_path = os.path.join(datadir, 'yaroslavskaya_anonymized.csv')
+
+    kaluga_df = load_region_df(kaluga_path)
+    krasnodar_df = load_region_df(krasnodar_path)
+    ryazan_df = load_region_df(ryazan_path)
+    vologda_df = load_region_df(vologda_path)
+    yaroslavl_df = load_region_df(yaroslavl_path)
+
+    kaluga_nodes = kaluga_df['anonymized_id'].unique()
+    krasnodar_nodes = krasnodar_df['anonymized_id'].unique()
+    ryazan_nodes = ryazan_df['anonymized_id'].unique()
+    vologda_nodes = vologda_df['anonymized_id'].unique()
+    yaroslavl_nodes = yaroslavl_df['anonymized_id'].unique()
+    all_nodes = np.concatenate([kaluga_nodes, krasnodar_nodes, ryazan_nodes, vologda_nodes, yaroslavl_nodes])
+
+    print("------------------------------------------------------------")
+
+    print(f"Total ids encountered: {len(all_nodes)}, {len(np.unique(all_nodes))} of which are unique.")
+
+    print("------------------------------------------------------------")
+
+    graph_df = pandas.read_csv(graph_path, dtype={
         'node_id1': 'int',
         'node_id2': 'int',
         'ibd_sum': 'float',
@@ -373,8 +375,7 @@ def data_stats(datadir):
     # Combine two columns and get unique ids as a set
     nodes_in_graph = set(pandas.concat([graph_df['node_id1'], graph_df['node_id2']]).unique())
     # Get all ids from region datasets
-    print(type(get_region_ids()))
-    nodes_in_regions = set(get_region_ids())
+    nodes_in_regions = set(np.unique(all_nodes))
 
     # Check if the dataset includes every region data id
     if nodes_in_regions.issubset(nodes_in_graph):
@@ -382,7 +383,21 @@ def data_stats(datadir):
     else:
         print('Not OK: some ids are not in the dataset')
 
-    print('\nStatistics:')
+    print("------------------------------------------------------------")
+
+    # Prints a repeated anonymized_id with the location found.
+    nodes_locations = defaultdict(set)
+    node_arrays = [kaluga_nodes, krasnodar_nodes, ryazan_nodes, vologda_nodes, yaroslavl_nodes]
+    for i, node_array in enumerate(node_arrays):
+        for node in node_array:
+            nodes_locations[node].add(regions[i])
+
+    for node, locations in nodes_locations.items():
+        if len(locations) >= 2:
+            print(f"Anonymized_id {node} is in {', '.join(map(str, locations))}")
+
+    print("------------------------------------------------------------")
+    print('Statistics:')
     print(f'Number of pairs in the dataset: {edges_count}')
     print(f'Number of ids in the dataset: {len(nodes_in_graph)}')
     print(f'Number of ids in the region datasets: {len(nodes_in_regions)}')
