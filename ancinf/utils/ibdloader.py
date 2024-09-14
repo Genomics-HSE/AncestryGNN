@@ -300,7 +300,9 @@ def get_weighted_dataloaders():
 
 
 def load_region_df(region_df_path):
-    print("------------------------------------------------------------")
+    """
+        returns fixed region dataset as pandas.DataFrame.
+    """
     print(f"Loading {region_df_path}.")
     nodes_df = pandas.read_csv(region_df_path)
     print("The following values were encountered in the field 'value':")
@@ -316,9 +318,9 @@ def load_region_df(region_df_path):
     nodes_df['value'] = nodes_df['value'].str.replace(' область', '', regex=False)
     nodes_df['value'] = nodes_df['value'].str.replace(' край', '', regex=False)
     # Delete duplicate rows
-    node_list_df = nodes_df.drop_duplicates()
+    node_df = nodes_df.drop_duplicates()
 
-    return node_list_df
+    return node_df
 
 
 def data_stats(datadir):
@@ -335,11 +337,17 @@ def data_stats(datadir):
     vologda_path = os.path.join(datadir, 'vologodskaya_anonymized.csv')
     yaroslavl_path = os.path.join(datadir, 'yaroslavskaya_anonymized.csv')
 
+    print("------------------------------------------------------------")
     kaluga_df = load_region_df(kaluga_path)
+    print("------------------------------------------------------------")
     krasnodar_df = load_region_df(krasnodar_path)
+    print("------------------------------------------------------------")
     ryazan_df = load_region_df(ryazan_path)
+    print("------------------------------------------------------------")
     vologda_df = load_region_df(vologda_path)
+    print("------------------------------------------------------------")
     yaroslavl_df = load_region_df(yaroslavl_path)
+    print("------------------------------------------------------------")
 
     kaluga_nodes = kaluga_df['anonymized_id'].unique()
     krasnodar_nodes = krasnodar_df['anonymized_id'].unique()
@@ -347,8 +355,6 @@ def data_stats(datadir):
     vologda_nodes = vologda_df['anonymized_id'].unique()
     yaroslavl_nodes = yaroslavl_df['anonymized_id'].unique()
     all_nodes = np.concatenate([kaluga_nodes, krasnodar_nodes, ryazan_nodes, vologda_nodes, yaroslavl_nodes])
-
-    print("------------------------------------------------------------")
 
     print(f"Total ids encountered: {len(all_nodes)}, {len(np.unique(all_nodes))} of which are unique.")
 
