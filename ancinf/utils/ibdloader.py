@@ -78,9 +78,9 @@ def removecloserelatives(df, maxweight):
         #    print("for node", idx, "no rows removed", remover.shape[0], "left")    
         if remover.shape[0]==0:
             break
-    
-    df = df[~df['node_id1'].isin(to_remove)]
-    df = df[~df['node_id2'].isin(to_remove)]
+    print("removing", len(to_remove), "nodes as their close relatives are present")
+    df.drop(df[df['node_id1'].isin(to_remove)].index, inplace=True)
+    df.drop(df[df['node_id2'].isin(to_remove)].index, inplace=True)
     
         
 
