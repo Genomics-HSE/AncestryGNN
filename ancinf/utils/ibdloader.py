@@ -48,9 +48,44 @@ def checkuniqids(uniqids):
     else:
         print("WARNING: ids are not consequtive, must be translated!")
 
+        
+def removecloserelatives(df, maxweight):
+    df_filtered = df[df["ibd_sum"]>maxweight] 
+    uniqids = getuniqnodes(df_filtered, "relatives removal")
+    nodes = uniqids["node_id"].to_numpy()
+    counts = np.ones(nodes.shape[0], dtype=np.int64)
+
+    df1 = df_filtered[['node_id1']].rename(columns={'node_id1': 'node_id'})
+    df2 = df_filtered[['node_id2']].rename(columns={'node_id2': 'node_id'})
+    repeatingnodes = pandas.concat([df1, df2])
+
+    for idx in range(nodes.shape[0]):
+        node = nodes[idx]
+        occurences = repeatingnodes[repeatingnodes["node_id"]==node].shape[0]
+        counts[idx] = occurences
+    
+    indices = counts.argsort()[::-1]
+    descendingpower = nodes[indices]
+    
+    remover = df_filtered.copy()
+    to_remove = []
+    for idx,node in enumerate(descendingpower):
+        tmp = remover[ ((remover.node_id1 != node) & ( remover.node_id2 != node) )]
+        if tmp.shape[0] < remover.shape[0]:
+            to_remove.append(node)
+            remover = tmp
+        #else:
+        #    print("for node", idx, "no rows removed", remover.shape[0], "left")    
+        if remover.shape[0]==0:
+            break
+    
+    df = df[~df['node_id1'].isin(to_remove)]
+    df = df[~df['node_id2'].isin(to_remove)]
+    
+        
 
 def load_pure(datafilename, labelfilenames={}, unknown_share=0, minclassize=None, removeclasses=None, only=None,
-              debug=True):
+              maxweight=None, debug=True):
     '''Verify and load files from dataset1 pure format
         into numpy arrays
     
@@ -85,6 +120,7 @@ def load_pure(datafilename, labelfilenames={}, unknown_share=0, minclassize=None
         stripnodename(dfibd)
     else:
         # TODO remove extra work as we already have normal structure in this case
+        
         # add columns with label_id1 and label_id2 with numerical stirngs
         # first fill with masked then use all the label datafiles
         dfibd["label_id1"] = 'masked'
@@ -124,12 +160,20 @@ def load_pure(datafilename, labelfilenames={}, unknown_share=0, minclassize=None
         # 3. after graph loading find close relatives with different labels
 
         for lbl in labelarrays:
-            for itr, idx in enumerate(labelarrays[lbl]):
-                print("fixing", lbl, " : ", itr, "of ", labelarrays[lbl].shape[0], "elements")
-                dfibd.loc[dfibd["node_id1"] == idx, "label_id1"] = lbl
-                dfibd.loc[dfibd["node_id2"] == idx, "label_id2"] = lbl
+            print ("fixing label", lbl)
+            dfibd.loc[dfibd["node_id1"].isin(labelarrays[lbl]), "label_id1"] = lbl
+            dfibd.loc[dfibd["node_id2"].isin(labelarrays[lbl]), "label_id2"] = lbl
+            #for itr, idx in enumerate(labelarrays[lbl]):
+                #print("fixing", lbl, " : ", itr, "of ", labelarrays[lbl].shape[0], "elements")
+                #dfibd.loc[dfibd["node_id1"] == idx, "label_id1"] = lbl
+                #dfibd.loc[dfibd["node_id2"] == idx, "label_id2"] = lbl
         # todo we want full graph or at least unknown_share
         removeweakclasses(dfibd, ['masked'], debug)
+        
+        # now it is time to remove too close relatives (ibdsum>maxweight)
+        # try to remove as little nodes as possible
+        if not maxweight is None:
+            removecloserelatives(dfibd, maxweight)
 
     if not (removeclasses is None):
         removeweakclasses(dfibd, removeclasses, debug)
