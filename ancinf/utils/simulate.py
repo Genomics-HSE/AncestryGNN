@@ -165,7 +165,7 @@ def collectandsaveparams(datadir, workdir, infile, outfile):
 
 
 def simulateandsaveonedataset(datasetparams, offset, fname, rng):        
-    population_sizes = datasetparams["pop_sizes"]        
+    population_sizes = datasetparams["pop_sizes"]
     edge_probs = np.array(datasetparams["edge_probability"])
     mean_weight = np.array(datasetparams["mean_weight"]) - offset #the next function wants corrected mean weights
     classes = datasetparams["pop_names"]
@@ -330,7 +330,7 @@ def filterandsaveonedataset(indatafilename, labelfilenames, outdatapathfilenameb
     if not part_ok:
         print("bad partition for normal-mask-clean dataset part")                    
     normalnodes, masknodes, cleannodes = gettrainvaltestnodes(trainnodeclasses, valnodeclasses, testnodeclasses)    
-    print("normalnodes", idxtranslator[normalnodes].tolist())
+    #print("normalnodes", idxtranslator[normalnodes].tolist())
     if maskshare>0:
         print("masknodes", idxtranslator[masknodes].tolist())
     if cleanshare > 0:

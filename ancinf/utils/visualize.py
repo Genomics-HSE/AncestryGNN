@@ -25,7 +25,9 @@ def visualize_classifier_data(data, fig_path=None, weight_type=None, mask_percen
                                  'Volga_weights_partial_labels': 'VU',
                                  'Western-Europe_weights_partial_labels': 'WE'}
             
-            classifier_names_mapping = {'AttnGCN': 'AttnGCN',
+            classifier_names_mapping = {
+                '''
+                'AttnGCN': 'AttnGCN',
                                        'AttnGCN_gb': 'AttnGCN_gb',
                                        'AttnGCN_narrow_long': 'AttnGCN_narrow_long',
                                        'AttnGCN_narrow_long_gb': 'AttnGCN_narrow_long_gb',
@@ -81,7 +83,8 @@ def visualize_classifier_data(data, fig_path=None, weight_type=None, mask_percen
                                        'MultiRankWalk': 'Multi-Rank-Walk',
                                        'RelationalNeighbor': 'Relational neighbor classifier',
                                        'RidgeRegression': 'Ridge regression',
-                                       'Spectral': 'Spectral clustering'}
+                                       'Spectral': 'Spectral clustering'
+                                       '''}
 
             for name, metrics in classifiers.items():
                 if name == "exp_idx":
@@ -92,7 +95,10 @@ def visualize_classifier_data(data, fig_path=None, weight_type=None, mask_percen
 
             classifier_names_mapped = []
             for name in classifier_names:
-                classifier_names_mapped.append(classifier_names_mapping[name])
+                if name in classifier_names_mapping:
+                    classifier_names_mapped.append(classifier_names_mapping[name])
+                else:
+                    classifier_names_mapped.append(name)
             
             # Create a DataFrame for easier plotting with seaborn
             df = pd.DataFrame({

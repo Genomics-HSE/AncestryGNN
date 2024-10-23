@@ -13,12 +13,29 @@ def stripnodename(df):
     df['node_id2'] = df['node_id2'].apply(lambda x: int(x[5:]))
 
 
-def removeweakclasses(df, weaklabels, debug=True):
-    for c in weaklabels:
-        if debug:
-            print("dropping", c)
-        df.drop(df[df['label_id1'] == c].index, inplace=True)
-        df.drop(df[df['label_id2'] == c].index, inplace=True)
+def removeweakclasses(df, weaklabels, debug=True, share_to_keep=None):
+    if share_to_keep is None:
+        for c in weaklabels:
+            if debug:
+                print("dropping", c)
+            df.drop(df[df['label_id1'] == c].index, inplace=True)
+            df.drop(df[df['label_id2'] == c].index, inplace=True)
+    else:
+        # keep some of the labels
+        # 1. find how many nodes of the label is present
+        
+        df1 = df[['node_id1', 'label_id1']].rename(columns={'node_id1': 'node_id', 'label_id1': 'label_id'})
+        df2 = df[['node_id2', 'label_id2']].rename(columns={'node_id2': 'node_id', 'label_id2': 'label_id'})
+        uniqnodes = pandas.concat([df1, df2]).drop_duplicates()
+        
+        for c in weaklabels:
+            weaknodes = uniqnodes[uniqnodes['label_id']==c]['node_id'].to_numpy()
+            print('label to remove:', c)            
+            intshare_to_remove = int(weaknodes.shape[0]*(1-share_to_keep))
+            print(f"total: {weaknodes.shape[0]}, removing: {intshare_to_remove}")
+            print("removing nodes:", weaknodes[0:intshare_to_remove])
+            df.drop(df[df['node_id1'].isin(weaknodes[0:intshare_to_remove])].index, inplace=True)
+            df.drop(df[df['node_id2'].isin(weaknodes[0:intshare_to_remove])].index, inplace=True)
 
 
 def getuniqnodes(df, dftype, debug=True):
@@ -79,13 +96,15 @@ def removecloserelatives(df, maxweight):
         if remover.shape[0]==0:
             break
     print("removing", len(to_remove), "nodes as their close relatives are present")
+    # closerelativesdf = df[df['node_id1'].isin(to_remove) and df['node_id2'].isin(to_remove)].copy()
     df.drop(df[df['node_id1'].isin(to_remove)].index, inplace=True)
     df.drop(df[df['node_id2'].isin(to_remove)].index, inplace=True)
+    return to_remove
     
         
 
 def load_pure(datafilename, labelfilenames={}, unknown_share=0, minclassize=None, removeclasses=None, only=None,
-              maxweight=None, debug=True):
+              maxweight=None, include_unknown=None, debug=True):
     '''Verify and load files from dataset1 pure format
         into numpy arrays
     
@@ -115,6 +134,8 @@ def load_pure(datafilename, labelfilenames={}, unknown_share=0, minclassize=None
     labeldict: dict of labels eg {"pop1":0, "pop2":1}
     idxtranslator: i-th node_id in the i-th element
     '''
+    
+    
     dfibd = pandas.read_csv(datafilename)
     if labelfilenames == {}:
         stripnodename(dfibd)
@@ -150,15 +171,20 @@ def load_pure(datafilename, labelfilenames={}, unknown_share=0, minclassize=None
                     print(isect)
                     to_remove.update(isect)
         # remove 
+        print("removing multi-labelled nodes:")
         for lbl in labelarrays:
+            len_before = labelarrays[lbl].shape[0]
             labelarrays[lbl] = np.array(list(set(labelarrays[lbl]).difference(to_remove)))
-            print(lbl, "after removing duplicates:")
-            print(labelarrays[lbl])
-
+            len_after = labelarrays[lbl].shape[0]            
+            print(f"{lbl}: {len_before}->{len_after}")
+            # print(labelarrays[lbl])
+        dfibd.drop(dfibd[dfibd['node_id1'].isin(to_remove)].index, inplace=True)
+        dfibd.drop(dfibd[dfibd['node_id2'].isin(to_remove)].index, inplace=True)
         # TODO
         # 4. check indices are present in graph -> inform and remove non-present
-        # 3. after graph loading find close relatives with different labels
-
+        
+        # 3. after graph loading find close relatives with different labels and inform
+        
         for lbl in labelarrays:
             print ("fixing label", lbl)
             dfibd.loc[dfibd["node_id1"].isin(labelarrays[lbl]), "label_id1"] = lbl
@@ -168,12 +194,21 @@ def load_pure(datafilename, labelfilenames={}, unknown_share=0, minclassize=None
                 #dfibd.loc[dfibd["node_id1"] == idx, "label_id1"] = lbl
                 #dfibd.loc[dfibd["node_id2"] == idx, "label_id2"] = lbl
         # todo we want full graph or at least unknown_share
-        removeweakclasses(dfibd, ['masked'], debug)
+        removeweakclasses(dfibd, ['masked'], debug=debug, share_to_keep=include_unknown)
         
         # now it is time to remove too close relatives (ibdsum>maxweight)
         # try to remove as little nodes as possible
         if not maxweight is None:
-            removecloserelatives(dfibd, maxweight)
+            removedcloserelatives = removecloserelatives(dfibd, maxweight)
+            print("label count after removing close relatives:")
+            for lbl in labelarrays:
+                len_before = labelarrays[lbl].shape[0]
+                labelarrays[lbl] = np.array(list(set(labelarrays[lbl]).difference(removedcloserelatives)))
+                len_after = labelarrays[lbl].shape[0]            
+                print(f"{lbl}: {len_before}->{len_after}")
+
+            
+            
 
     if not (removeclasses is None):
         removeweakclasses(dfibd, removeclasses, debug)
